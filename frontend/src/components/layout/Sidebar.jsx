@@ -1,130 +1,147 @@
-import { NavLink, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { Home, Compass, Search, Bell, User, Settings, LogOut } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
-import { useNotificationStore } from '../../store/notificationStore'
-import Tooltip from '../ui/Tooltip'
+import { useState } from 'react'
 
-export default function Sidebar() {
-  const { user, logout } = useAuthStore()
-  const { unreadCount } = useNotificationStore()
-  const navigate = useNavigate()
+const shortcuts = [
+  { name: 'Art and drawing', color: 'from-pink-400 to-rose-500', emoji: '🎨' },
+  { name: 'Dribbble Pro', color: 'from-pink-500 to-fuchsia-500', emoji: '🏀' },
+  { name: 'Behance Creative', color: 'from-blue-500 to-blue-700', emoji: 'Be' },
+  { name: 'One Piece Fan', color: 'from-orange-400 to-red-500', emoji: '🏴' },
+]
 
-  const handleLogout = async () => {
-    await logout()
-    navigate('/login')
-  }
-
-  const navItems = [
-    { name: 'Home', path: '/app', icon: Home },
-    { name: 'Explore', path: '/explore', icon: Compass },
-    { name: 'Search', path: '/search', icon: Search },
-    {
-      name: 'Notifications',
-      path: '/notifications',
-      icon: Bell,
-      badge: unreadCount > 0 ? unreadCount : null,
-    },
-    { name: 'Profile', path: `/profile/${user?.username}`, icon: User },
-    { name: 'Settings', path: '/settings', icon: Settings },
+function Avatar({ name, src, size = 72 }) {
+  const [errored, setErrored] = useState(false)
+  const initial = (name || 'U').trim().charAt(0).toUpperCase()
+  const colors = [
+    'from-blue-500 to-blue-700',
+    'from-pink-500 to-rose-500',
+    'from-purple-500 to-indigo-600',
+    'from-amber-500 to-orange-600',
+    'from-emerald-500 to-teal-600',
   ]
+  const grad = colors[(initial.charCodeAt(0) || 0) % colors.length]
 
-  const sidebarVariants = {
-    hidden: { opacity: 0, x: -20 },
-    visible: { opacity: 1, x: 0, transition: { staggerChildren: 0.05 } },
-  }
-
-  const itemVariants = {
-    hidden: { opacity: 0, x: -10 },
-    visible: { opacity: 1, x: 0 },
+  if (!src || errored) {
+    return (
+      <div
+        className={`rounded-full bg-gradient-to-br ${grad} flex items-center justify-center text-white font-bold border-4 border-white shadow-sm shrink-0`}
+        style={{ width: size, height: size, fontSize: size / 2.4 }}
+      >
+        {initial}
+      </div>
+    )
   }
 
   return (
-    <motion.div
-      initial="hidden"
-      animate="visible"
-      variants={sidebarVariants}
-      className="hidden lg:flex flex-col fixed left-0 top-16 bottom-0 w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 p-4 overflow-y-auto"
+    <img
+      src={src}
+      alt={name || 'avatar'}
+      onError={() => setErrored(true)}
+      className="rounded-full object-cover border-4 border-white shadow-sm shrink-0 bg-warm-100"
+      style={{ width: size, height: size }}
+    />
+  )
+}
+
+export default function Sidebar() {
+  const { user } = useAuthStore()
+  const navigate = useNavigate()
+
+  const profile = user
+  const name = profile?.name || profile?.username || 'User'
+  const handle = profile?.username || 'me'
+  const posts = profile?.postsCount ?? 250
+  const followers = profile?.followers?.length ?? 2022
+  const following = profile?.following?.length ?? 590
+  const avatar = profile?.profileImage
+
+  const cover = 'https://images.unsplash.com/photo-1503262028195-93c528f03218?w=800&q=80'
+  const coverHeight = 70
+  const avatarSize = 72
+  // Avatar sits so its center is on the cover/content boundary:
+  // top of cover (0) + cover height (70) - half of avatar (36) = 34
+  const avatarTop = coverHeight - avatarSize / 2
+
+  return (
+    <aside
+      className="hidden lg:flex flex-col fixed left-0 top-[70px] bottom-0 w-[280px] px-3 py-4 overflow-y-auto"
+      style={{ background: '#F5F5F7' }}
     >
-      {user && (
-        <motion.div
-          variants={itemVariants}
-          className="mb-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl"
-        >
-          <div className="flex items-center gap-3 mb-3">
+      <div className="relative bg-white rounded-[20px] shadow-sm">
+        {/* Cover */}
+        <div className="overflow-hidden rounded-t-[20px]">
+          <div className="relative w-full" style={{ height: coverHeight }}>
             <img
-              src={user.profileImage || '/default-avatar.png'}
-              alt={user.username}
-              className="w-12 h-12 rounded-full object-cover"
+              src={cover}
+              alt="cover"
+              className="w-full h-full object-cover"
+              onError={(e) => (e.currentTarget.style.display = 'none')}
             />
+          </div>
+        </div>
+
+        {/* Absolutely-positioned avatar overlapping the cover boundary */}
+        <div
+          className="absolute left-0 right-0 flex justify-center pointer-events-none"
+          style={{ top: avatarTop }}
+        >
+          <div className="pointer-events-auto">
+            <Avatar name={name} src={avatar} size={avatarSize} />
+          </div>
+        </div>
+
+        {/* Content area with top padding to make room for the overlapping avatar */}
+        <div className="px-4 pb-4 pt-10">
+          <div className="mt-2 text-center">
+            <h3 className="font-semibold text-sm text-gray-900 truncate">{name}</h3>
+            <p className="text-xs text-gray-500 truncate">@{handle}</p>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between text-center">
             <div>
-              <h3 className="font-semibold text-sm">{user.name || user.username}</h3>
-              <p className="text-xs text-gray-500">@{user.username}</p>
+              <div className="text-base font-bold text-gray-900">{posts}</div>
+              <div className="text-[11px] text-gray-500">Post</div>
+            </div>
+            <div>
+              <div className="text-base font-bold text-gray-900">{followers}</div>
+              <div className="text-[11px] text-gray-500">Followers</div>
+            </div>
+            <div>
+              <div className="text-base font-bold text-gray-900">{following}</div>
+              <div className="text-[11px] text-gray-500">Following</div>
             </div>
           </div>
-          <div className="flex justify-between text-xs text-gray-500">
-            <div className="text-center">
-              <span className="block font-semibold text-gray-800 dark:text-gray-200">{user.followers?.length || 0}</span>
-              <span>Followers</span>
-            </div>
-            <div className="text-center">
-              <span className="block font-semibold text-gray-800 dark:text-gray-200">{user.following?.length || 0}</span>
-              <span>Following</span>
-            </div>
-            <div className="text-center">
-              <span className="block font-semibold text-gray-800 dark:text-gray-200">{user.postsCount || 0}</span>
-              <span>Posts</span>
-            </div>
-          </div>
-          <motion.button
-            onClick={() => navigate(`/profile/${user.username}`)}
-            whileHover={{ x: 3 }}
-            className="mt-3 w-full text-sm text-blue-600 hover:text-blue-700 font-medium"
+
+          <button
+            onClick={() => navigate(`/profile/${handle}`)}
+            className="mt-3 w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 rounded-lg transition-colors"
           >
             My Profile
-          </motion.button>
-        </motion.div>
-      )}
-
-      <motion.div variants={itemVariants} className="mb-6">
-        <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 px-3">Shortcuts</h4>
-        <nav className="space-y-1">
-          {navItems.map(({ name, path, icon: Icon, badge }) => (
-            <NavLink
-              key={path}
-              to={path}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
-                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-                }`
-              }
-            >
-              <div className="relative">
-                <Icon className="w-5 h-5" />
-                {badge && (
-                  <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                    {badge}
-                  </span>
-                )}
-              </div>
-              <span>{name}</span>
-            </NavLink>
-          ))}
-        </nav>
-      </motion.div>
-
-      <div className="mt-auto">
-        <motion.button
-          variants={itemVariants}
-          onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors w-full"
-        >
-          <LogOut className="w-5 h-5" />
-          <span>Sign Out</span>
-        </motion.button>
+          </button>
+        </div>
       </div>
-    </motion.div>
+
+      <div className="bg-white rounded-[18px] mt-4 shadow-sm">
+        <div className="flex items-center justify-between px-4 pt-4 pb-2">
+          <h4 className="text-sm font-semibold text-gray-900">Your shortcuts</h4>
+          <button className="text-xs text-gray-500 hover:text-gray-700">See all</button>
+        </div>
+        <div className="px-2 pb-2">
+          {shortcuts.map((s) => (
+            <button
+              key={s.name}
+              className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-50 transition-colors text-left"
+            >
+              <div
+                className={`w-9 h-9 rounded-full bg-gradient-to-br ${s.color} flex items-center justify-center text-white text-xs font-bold shrink-0`}
+              >
+                {s.emoji}
+              </div>
+              <span className="text-sm text-gray-800">{s.name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </aside>
   )
 }

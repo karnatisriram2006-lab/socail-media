@@ -19,7 +19,7 @@ export default function ExplorePage() {
 
   return (
     <div className="max-w-4xl mx-auto py-4 px-4">
-      <h1 className="text-2xl font-bold mb-6">Explore</h1>
+      <h1 className="text-2xl font-bold mb-6 text-gray-900">Explore</h1>
 
       {explorePosts.length === 0 && !loading ? (
         <div className="text-center py-12 text-gray-500">

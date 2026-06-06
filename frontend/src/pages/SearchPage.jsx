@@ -14,11 +14,18 @@ export default function SearchPage() {
 
   useEffect(() => {
     if (query) {
-      setLoading(true)
-      API.get(`/api/search?q=${encodeURIComponent(query)}`)
-        .then((res) => setResults(res.data))
-        .catch(console.error)
-        .finally(() => setLoading(false))
+      const run = async () => {
+        setLoading(true)
+        try {
+          const res = await API.get(`/api/search?q=${encodeURIComponent(query)}`)
+          setResults(res.data)
+        } catch (err) {
+          console.error(err)
+        } finally {
+          setLoading(false)
+        }
+      }
+      run()
     }
   }, [query])
 
@@ -39,7 +46,7 @@ export default function SearchPage() {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search people, posts, tags..."
-            className="w-full pl-12 pr-4 py-3 bg-gray-100 dark:bg-gray-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full pl-12 pr-4 py-3 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
       </form>
@@ -50,7 +57,7 @@ export default function SearchPage() {
         </div>
       ) : query ? (
         <div>
-          <div className="flex gap-4 mb-6 border-b border-gray-200 dark:border-gray-800">
+          <div className="flex gap-4 mb-6 border-b border-gray-200">
             {['top', 'people', 'posts'].map((tab) => (
               <button
                 key={tab}
@@ -72,7 +79,7 @@ export default function SearchPage() {
                   <motion.div key={user._id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <Link
                       to={`/profile/${user.username}`}
-                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
+                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50"
                     >
                       <img src={user.profileImage || '/default-avatar.png'} alt="" className="w-10 h-10 rounded-full" />
                       <div>

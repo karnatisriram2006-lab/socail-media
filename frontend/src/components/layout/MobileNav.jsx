@@ -2,18 +2,16 @@ import { NavLink } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Home, Compass, Search, PlusSquare, User } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
-import { useNotificationStore } from '../../store/notificationStore'
 
 export default function MobileNav({ onCreatePostClick }) {
   const { user } = useAuthStore()
-  const { unreadCount } = useNotificationStore()
 
   return (
     <motion.nav
       initial={{ y: 50 }}
       animate={{ y: 0 }}
       transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-      className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 px-4 py-2 flex items-center justify-around"
+      className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 px-4 py-2 flex items-center justify-around"
     >
       {[
         { to: '/app', icon: Home },
@@ -25,7 +23,7 @@ export default function MobileNav({ onCreatePostClick }) {
           className={({ isActive }) =>
             `p-2 rounded-lg transition-colors ${
               isActive
-                ? 'text-blue-600 bg-blue-50 dark:bg-blue-900'
+                ? 'text-blue-600 bg-blue-50'
                 : 'text-gray-500 hover:text-gray-700'
             }`
           }
@@ -48,7 +46,7 @@ export default function MobileNav({ onCreatePostClick }) {
         className={({ isActive }) =>
           `p-2 rounded-lg transition-colors ${
             isActive
-              ? 'text-blue-600 bg-blue-50 dark:bg-blue-900'
+              ? 'text-blue-600 bg-blue-50'
               : 'text-gray-500 hover:text-gray-700'
           }`
         }

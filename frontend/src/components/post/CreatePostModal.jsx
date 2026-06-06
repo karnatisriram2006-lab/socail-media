@@ -71,10 +71,10 @@ export default function CreatePostModal({ onClose }) {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-xl max-w-lg w-full overflow-hidden"
+        className="relative bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-800">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold">Create new post</h2>
           <button
             type="button"
@@ -90,7 +90,7 @@ export default function CreatePostModal({ onClose }) {
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
-              className="bg-red-50 dark:bg-red-900/20 text-red-600 text-sm p-3 rounded-lg"
+              className="bg-red-50 text-red-600 text-sm p-3 rounded-lg"
             >
               {error}
             </motion.div>
@@ -101,10 +101,10 @@ export default function CreatePostModal({ onClose }) {
               onDragOver={handleDragOver}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-12 text-center cursor-pointer hover:border-blue-500 transition-colors"
+              className="border-2 border-dashed border-gray-300 rounded-xl p-12 text-center cursor-pointer hover:border-blue-500 transition-colors"
             >
               <Upload className="w-12 h-12 mx-auto text-gray-400 mb-3" />
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              <p className="text-sm font-medium text-gray-600">
                 Drag & drop or click to upload
               </p>
               <p className="text-xs text-gray-400 mt-1">
@@ -143,7 +143,7 @@ export default function CreatePostModal({ onClose }) {
             value={caption}
             onChange={(e) => setCaption(e.target.value)}
             rows={3}
-            className="w-full p-3 bg-gray-50 dark:bg-gray-800 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full p-3 bg-gray-50 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
 
           <div className="flex items-center justify-between">

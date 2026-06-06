@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
-import { motion } from 'framer-motion'
 
 export default function Navbar() {
   const { user, logout } = useAuthStore()
@@ -15,8 +14,8 @@ export default function Navbar() {
   return (
     <nav className="bg-white dark:bg-gray-900 shadow-sm border-b border-gray-200 dark:border-gray-800">
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
-        <Link to="/app" className="text-xl font-bold">
-          VibeSnaps
+        <Link to="/app" className="text-xl font-bold text-gray-900 dark:text-white">
+          <span className="text-blue-600">Vibe</span>Snaps
         </Link>
         <div className="flex items-center gap-4">
           <Link to="/explore" className="text-sm font-medium text-gray-600 hover:text-gray-900">

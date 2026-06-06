@@ -32,7 +32,7 @@ const ExplorePage = lazy(() => import("./pages/ExplorePage"));
 const SearchPage = lazy(() => import("./pages/SearchPage"));
 
 function PageLoader() {
-  return <div className="p-8">Loading…</div>;
+  return <div className="p-8 text-center text-gray-500">Loading…</div>;
 }
 
 function ProtectedRoute({ children }) {
@@ -40,6 +40,24 @@ function ProtectedRoute({ children }) {
   if (!isInitialized) return <PageLoader />;
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
+}
+
+function DashboardLayout({ children, onCreatePost, showCreatePost, onCloseCreatePost }) {
+  return (
+    <div className="app-bg min-h-screen">
+      <Navbar />
+      <Sidebar />
+      <main
+        className="lg:pl-[280px] xl:pr-[300px] pt-[70px] min-h-screen"
+      >
+        {children}
+      </main>
+      <RightSidebar />
+      <MobileNav onCreatePostClick={onCreatePost} />
+      <ScrollToTop />
+      {showCreatePost && <CreatePostModal onClose={onCloseCreatePost} />}
+    </div>
+  );
 }
 
 function AppContent() {
@@ -67,31 +85,24 @@ function AppContent() {
   useEffect(() => {
     if (!isInitialized) return;
 
-    // Check for session errors from API interceptor
     const sessionError = sessionStorage.getItem("authError");
     if (sessionError && user) {
-      // Auth error occurred, need to logout
       sessionStorage.removeItem("authError");
       logout();
       return;
     }
 
     if (user) {
-      // User is authenticated
       initSocket().catch(console.error);
       fetchNotifications();
       fetchFeed();
       fetchProfile(user.username);
 
-      // Redirect from auth pages to app
       if (isAuthPage) {
         navigate("/app", { replace: true });
       }
     } else {
-      // User is not authenticated
       disconnectSocket();
-
-      // Redirect non-auth users away from protected pages
       if (!["/", "/login", "/register"].includes(location.pathname)) {
         navigate("/login", { replace: true });
       }
@@ -113,52 +124,87 @@ function AppContent() {
   const showLayout = user && isInitialized && !isAuthPage && !isLandingPage;
 
   return (
-    <>
-      {showLayout && <Sidebar onCreatePost={() => setShowCreatePost(true)} />}
-      <div className="min-h-screen">
-        <AnimatePresence mode="wait">
-          <Suspense fallback={<PageLoader />}>
-            <Routes location={location} key={location.pathname}>
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route
-                path="/app"
-                element={
-                  <ProtectedRoute>
-                    <HomeFeed />
-                  </ProtectedRoute>
-                }
-              />
-              <Route path="/profile/:username" element={<ProfilePage />} />
-              <Route
-                path="/edit-profile"
-                element={
-                  <ProtectedRoute>
-                    <EditProfilePage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route path="/explore" element={<ExplorePage />} />
-              <Route path="/search" element={<SearchPage />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </Suspense>
-        </AnimatePresence>
-      </div>
+    <AnimatePresence mode="wait">
+      <Suspense fallback={<PageLoader />}>
+        <Routes location={location} key={location.pathname}>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
 
-      {showLayout && (
-        <>
-          <Navbar />
-          <RightSidebar />
-          <MobileNav />
-          <ScrollToTop />
-          {showCreatePost && (
-            <CreatePostModal onClose={() => setShowCreatePost(false)} />
-          )}
-        </>
-      )}
-    </>
+          <Route
+            path="/app"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout
+                  onCreatePost={() => setShowCreatePost(true)}
+                  showCreatePost={showCreatePost}
+                  onCloseCreatePost={() => setShowCreatePost(false)}
+                >
+                  <HomeFeed />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/explore"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout
+                  onCreatePost={() => setShowCreatePost(true)}
+                  showCreatePost={showCreatePost}
+                  onCloseCreatePost={() => setShowCreatePost(false)}
+                >
+                  <ExplorePage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/search"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout
+                  onCreatePost={() => setShowCreatePost(true)}
+                  showCreatePost={showCreatePost}
+                  onCloseCreatePost={() => setShowCreatePost(false)}
+                >
+                  <SearchPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile/:username"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout
+                  onCreatePost={() => setShowCreatePost(true)}
+                  showCreatePost={showCreatePost}
+                  onCloseCreatePost={() => setShowCreatePost(false)}
+                >
+                  <ProfilePage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/edit-profile"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout
+                  onCreatePost={() => setShowCreatePost(true)}
+                  showCreatePost={showCreatePost}
+                  onCloseCreatePost={() => setShowCreatePost(false)}
+                >
+                  <EditProfilePage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+    </AnimatePresence>
   );
 }
 

@@ -47,11 +47,11 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-8"
+        className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8"
       >
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-2">
@@ -65,7 +65,7 @@ export default function RegisterPage() {
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
-            className="bg-red-50 dark:bg-red-900/20 text-red-600 text-sm p-3 rounded-lg mb-4"
+            className="bg-red-50 text-red-600 text-sm p-3 rounded-lg mb-4"
           >
             {formError || error}
           </motion.div>
@@ -119,10 +119,10 @@ export default function RegisterPage() {
 
         <div className="relative my-6">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-200 dark:border-gray-700" />
+            <div className="w-full border-t border-gray-200" />
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-white dark:bg-gray-900 text-gray-500">or sign up with</span>
+            <span className="px-2 bg-white text-gray-500">or sign up with</span>
           </div>
         </div>
 

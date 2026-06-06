@@ -52,12 +52,12 @@ export default function EditProfilePage() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm p-6"
+        className="bg-white rounded-2xl shadow-sm p-6"
       >
         <h1 className="text-2xl font-bold mb-6">Edit Profile</h1>
 
         {(error || formError) && (
-          <div className="bg-red-50 dark:bg-red-900/20 text-red-600 text-sm p-3 rounded-lg mb-4">
+          <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg mb-4">
             {formError || error}
           </div>
         )}
@@ -102,14 +102,14 @@ export default function EditProfilePage() {
             placeholder="Your name"
           />
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bio</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Bio</label>
             <textarea
               value={bio}
               onChange={(e) => setBio(e.target.value)}
               placeholder="Tell us about yourself"
               rows={3}
               maxLength={150}
-              className="w-full p-3 bg-gray-50 dark:bg-gray-800 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full p-3 bg-gray-50 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <p className="text-xs text-gray-400 mt-1">{bio.length}/150</p>
           </div>

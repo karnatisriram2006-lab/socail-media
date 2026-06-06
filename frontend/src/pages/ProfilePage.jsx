@@ -40,7 +40,7 @@ export default function ProfilePage() {
 
   return (
     <div className="max-w-4xl mx-auto py-6 px-4">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm p-6 mb-6">
+      <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
         <div className="flex items-start gap-6">
           <img
             src={profile.profileImage || '/default-avatar.png'}

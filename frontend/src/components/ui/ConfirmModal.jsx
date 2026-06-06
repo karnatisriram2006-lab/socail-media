@@ -16,7 +16,7 @@ export default function ConfirmModal({ open, onClose, onConfirm, title, message,
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-xl max-w-sm w-full p-6"
+            className="relative bg-white rounded-2xl shadow-xl max-w-sm w-full p-6"
           >
             <h3 className="text-lg font-semibold mb-2">{title}</h3>
             <p className="text-sm text-gray-500 mb-6">{message}</p>

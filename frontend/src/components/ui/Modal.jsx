@@ -16,10 +16,10 @@ export default function Modal({ open, onClose, children, title }) {
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+            className="relative bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
           >
             {title && (
-              <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-800">
+              <div className="flex items-center justify-between p-4 border-b border-gray-200">
                 <h2 className="text-lg font-semibold">{title}</h2>
                 <button
                   onClick={onClose}
