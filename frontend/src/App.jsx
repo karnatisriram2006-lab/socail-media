@@ -48,31 +48,67 @@ function AppContent() {
   const isLandingPage = location.pathname === "/";
 
   const navigate = useNavigate();
-  const { user, isInitialized, initialize } = useAuthStore();
+  const { user, isInitialized, initialize, logout } = useAuthStore();
   const { fetchNotifications } = useNotificationStore();
   const { fetchFeed } = usePostStore();
   const { fetchProfile } = useProfileStore();
   const [showCreatePost, setShowCreatePost] = useState(false);
+  const initializeRef = React.useRef(false);
 
+  // Initialize auth only once on app load
   useEffect(() => {
-    initialize();
-  }, []);
+    if (!initializeRef.current) {
+      initializeRef.current = true;
+      initialize();
+    }
+  }, [initialize]);
 
+  // Handle post-login logic and navigation
   useEffect(() => {
-    if (user && isInitialized) {
+    if (!isInitialized) return;
+
+    // Check for session errors from API interceptor
+    const sessionError = sessionStorage.getItem("authError");
+    if (sessionError && user) {
+      // Auth error occurred, need to logout
+      sessionStorage.removeItem("authError");
+      logout();
+      return;
+    }
+
+    if (user) {
+      // User is authenticated
       initSocket().catch(console.error);
       fetchNotifications();
       fetchFeed();
       fetchProfile(user.username);
+
+      // Redirect from auth pages to app
       if (isAuthPage) {
-        navigate("/app");
+        navigate("/app", { replace: true });
+      }
+    } else {
+      // User is not authenticated
+      disconnectSocket();
+
+      // Redirect non-auth users away from protected pages
+      if (!["/", "/login", "/register"].includes(location.pathname)) {
+        navigate("/login", { replace: true });
       }
     }
-    if (!user && isInitialized) {
-      disconnectSocket();
-    }
+
     return () => disconnectSocket();
-  }, [user, isInitialized, isAuthPage, navigate]);
+  }, [
+    user,
+    isInitialized,
+    isAuthPage,
+    navigate,
+    location.pathname,
+    fetchNotifications,
+    fetchFeed,
+    fetchProfile,
+    logout,
+  ]);
 
   const showLayout = user && isInitialized && !isAuthPage && !isLandingPage;
 

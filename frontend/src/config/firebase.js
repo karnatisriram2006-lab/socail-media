@@ -12,4 +12,9 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
+
+// Configure Google Provider with required scopes
 export const googleProvider = new GoogleAuthProvider()
+googleProvider.addScope('profile')
+googleProvider.addScope('email')
+googleProvider.setCustomParameters({ prompt: 'select_account' })
