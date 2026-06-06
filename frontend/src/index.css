@@ -36,38 +36,6 @@ body {
   background: rgba(255, 255, 255, 0.2);
 }
 
-/* Animations */
-@keyframes fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fade-in {
-  animation: fade-in 0.5s ease-out forwards;
-}
-
-/* Loading shimmer */
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-.animate-shimmer {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.03) 25%, rgba(255, 255, 255, 0.06) 50%, rgba(255, 255, 255, 0.03) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-}
-
 /* Glass effect */
 .glass {
   background: rgba(255, 255, 255, 0.05);
@@ -84,4 +52,9 @@ body {
 .no-select {
   -webkit-user-select: none;
   user-select: none;
+}
+
+/* Section heading base */
+.section-heading {
+  @apply text-4xl md:text-6xl font-bold text-center mb-20 text-white;
 }

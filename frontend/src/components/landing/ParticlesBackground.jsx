@@ -1,4 +1,4 @@
-import { useRef, useMemo, useCallback } from 'react'
+import { useRef, useMemo } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 
@@ -6,17 +6,15 @@ export default function ParticlesBackground() {
   const ref = useRef()
   const { pointer } = useThree()
 
-  const [positions, colors, sizes] = useMemo(() => {
-    const count = 5000
+  const [positions, colors] = useMemo(() => {
+    const count = 2000
     const pos = new Float32Array(count * 3)
     const col = new Float32Array(count * 3)
-    const siz = new Float32Array(count)
     const palette = [
-      new THREE.Color('#3b82f6'),
-      new THREE.Color('#8b5cf6'),
-      new THREE.Color('#06b6d4'),
-      new THREE.Color('#6366f1'),
-      new THREE.Color('#a855f7'),
+      new THREE.Color('#6D5040'),
+      new THREE.Color('#927C6E'),
+      new THREE.Color('#D5D0CA'),
+      new THREE.Color('#342218'),
     ]
     for (let i = 0; i < count; i++) {
       const i3 = i * 3
@@ -32,21 +30,18 @@ export default function ParticlesBackground() {
       col[i3] = c.r
       col[i3 + 1] = c.g
       col[i3 + 2] = c.b
-      siz[i] = 0.05 + Math.random() * 0.15
     }
-    return [pos, col, siz]
+    return [pos, col]
   }, [])
 
   const mouseTarget = useRef({ x: 0, y: 0 })
 
-  const rotSpeed = useRef({ x: 0.0002, y: 0.0003 })
-
-  useFrame((_, delta) => {
+  useFrame(() => {
     if (!ref.current) return
-    mouseTarget.current.x += (pointer.x * 0.5 - mouseTarget.current.x) * 0.02
-    mouseTarget.current.y += (pointer.y * 0.5 - mouseTarget.current.y) * 0.02
-    ref.current.rotation.x += (mouseTarget.current.y * 0.005 + rotSpeed.current.x - ref.current.rotation.x) * delta * 0.5
-    ref.current.rotation.y += (mouseTarget.current.x * 0.005 + rotSpeed.current.y - ref.current.rotation.y) * delta * 0.5
+    mouseTarget.current.x += (pointer.x * 0.5 - mouseTarget.current.x) * 0.05
+    mouseTarget.current.y += (pointer.y * 0.5 - mouseTarget.current.y) * 0.05
+    ref.current.rotation.y += mouseTarget.current.x * 0.001
+    ref.current.rotation.x += mouseTarget.current.y * 0.001
   })
 
   return (
@@ -54,13 +49,12 @@ export default function ParticlesBackground() {
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" count={positions.length / 3} array={positions} itemSize={3} />
         <bufferAttribute attach="attributes-color" count={colors.length / 3} array={colors} itemSize={3} />
-        <bufferAttribute attach="attributes-size" count={sizes.length} array={sizes} itemSize={1} />
       </bufferGeometry>
       <pointsMaterial
-        size={0.12}
+        size={0.1}
         sizeAttenuation
         transparent
-        opacity={0.8}
+        opacity={0.6}
         blending={THREE.AdditiveBlending}
         depthWrite={false}
         vertexColors

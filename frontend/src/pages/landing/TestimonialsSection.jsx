@@ -3,38 +3,10 @@ import { motion, useScroll, useTransform } from 'framer-motion'
 import { Quote } from 'lucide-react'
 
 const testimonials = [
-  {
-    name: 'Sarah Chen',
-    handle: '@sarahcreates',
-    role: 'Digital Artist',
-    avatar: 'https://i.pravatar.cc/150?u=sarah',
-    text: 'VibeSnaps completely transformed how I share my art. The community is incredibly supportive!',
-    offset: 0,
-  },
-  {
-    name: 'Marcus Johnson',
-    handle: '@marcus_photo',
-    role: 'Photographer',
-    avatar: 'https://i.pravatar.cc/150?u=marcus',
-    text: 'The best platform for photographers who want real engagement, not just likes.',
-    offset: 100,
-  },
-  {
-    name: 'Elena Rodriguez',
-    handle: '@elena_writes',
-    role: 'Content Writer',
-    avatar: 'https://i.pravatar.cc/150?u=elena',
-    text: 'I found my audience here. The tools for creators are unmatched.',
-    offset: 50,
-  },
-  {
-    name: 'Alex Kim',
-    handle: '@alex_designs',
-    role: 'UI Designer',
-    avatar: 'https://i.pravatar.cc/150?u=alex',
-    text: 'Finally, a platform that puts creativity over algorithms. This is where design belongs.',
-    offset: 150,
-  },
+  { name: 'Sarah Chen', handle: '@sarahcreates', role: 'Digital Artist', avatar: 'https://i.pravatar.cc/150?u=sarah', text: 'VibeSnaps completely transformed how I share my art. The community is incredibly supportive!', offset: 0 },
+  { name: 'Marcus Johnson', handle: '@marcus_photo', role: 'Photographer', avatar: 'https://i.pravatar.cc/150?u=marcus', text: 'The best platform for photographers who want real engagement, not just likes.', offset: 100 },
+  { name: 'Elena Rodriguez', handle: '@elena_writes', role: 'Content Writer', avatar: 'https://i.pravatar.cc/150?u=elena', text: 'I found my audience here. The tools for creators are unmatched.', offset: 50 },
+  { name: 'Alex Kim', handle: '@alex_designs', role: 'UI Designer', avatar: 'https://i.pravatar.cc/150?u=alex', text: 'Finally, a platform that puts creativity over algorithms. This is where design belongs.', offset: 150 },
 ]
 
 function TestimonialCard({ testimonial, index }) {
@@ -61,10 +33,10 @@ function TestimonialCard({ testimonial, index }) {
         animate={{ y: [0, -6, 0] }}
         transition={{ duration: 4 + index, repeat: Infinity, ease: 'easeInOut', delay: index * 0.5 }}
       >
-        <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center mb-6">
-          <Quote className="w-6 h-6 text-blue-400" />
+        <div className="w-12 h-12 rounded-xl bg-warm-500/20 flex items-center justify-center mb-6">
+          <Quote className="w-6 h-6 text-warm-400" />
         </div>
-        <p className="text-gray-300 leading-relaxed mb-6 text-lg">
+        <p className="text-warm-200 leading-relaxed mb-6 text-lg">
           "{testimonial.text}"
         </p>
         <div className="flex items-center gap-4">
@@ -75,7 +47,7 @@ function TestimonialCard({ testimonial, index }) {
           />
           <div>
             <div className="font-semibold text-white">{testimonial.name}</div>
-            <div className="text-sm text-gray-400">{testimonial.role}</div>
+            <div className="text-sm text-warm-300">{testimonial.role}</div>
           </div>
         </div>
       </motion.div>
@@ -85,16 +57,15 @@ function TestimonialCard({ testimonial, index }) {
 
 export default function TestimonialsSection() {
   return (
-    <section className="py-32 relative min-h-screen flex flex-col items-center justify-center overflow-hidden">
+    <section className="py-32 relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-black">
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          backgroundImage:
-            'radial-gradient(rgba(59, 130, 246, 0.08) 1px, transparent 1px)',
+          backgroundImage: 'radial-gradient(rgba(109, 80, 64, 0.08) 1px, transparent 1px)',
           backgroundSize: '40px 40px',
         }}
       />
-      <div className="absolute inset-0 bg-gradient-to-b from-gray-950 via-transparent to-gray-950 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black via-transparent to-black pointer-events-none" />
       <motion.h2
         className="text-4xl md:text-6xl font-bold text-center w-full mb-20 text-white relative z-10"
         initial={{ opacity: 0, y: 20 }}
@@ -103,7 +74,7 @@ export default function TestimonialsSection() {
         transition={{ duration: 0.6 }}
       >
         Loved by{' '}
-        <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+        <span className="bg-gradient-to-r from-warm-400 to-warm-200 bg-clip-text text-transparent">
           Creators
         </span>
       </motion.h2>

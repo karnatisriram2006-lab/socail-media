@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react'
 import Lenis from 'lenis'
-import gsap from 'gsap'
 
 export default function useLenis() {
   const lenisRef = useRef(null)
@@ -12,18 +11,21 @@ export default function useLenis() {
       orientation: 'vertical',
       gestureOrientation: 'vertical',
       smoothWheel: true,
-      wheelMultiplier: 1,
-      touchMultiplier: 2,
+      wheelMultiplier: 0.8,
+      touchMultiplier: 1.5,
     })
 
     lenisRef.current = lenis
 
-    gsap.ticker.lagSmoothing(0)
-    gsap.ticker.add((time) => lenis.raf(time * 1000))
+    function raf(time) {
+      lenis.raf(time)
+      requestAnimationFrame(raf)
+    }
+
+    requestAnimationFrame(raf)
 
     return () => {
       lenis.destroy()
-      gsap.ticker.lagSmoothing(1)
     }
   }, [])
 
