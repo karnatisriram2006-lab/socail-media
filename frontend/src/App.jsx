@@ -13,6 +13,7 @@ import { useAuthStore } from "./store/authStore";
 import { useNotificationStore } from "./store/notificationStore";
 import { usePostStore } from "./store/postStore";
 import { useProfileStore } from "./store/profileStore";
+import { useChatStore } from "./store/chatStore";
 import { initSocket, disconnectSocket } from "./services/socket";
 import Navbar from "./components/layout/Navbar";
 import Sidebar from "./components/layout/Sidebar";
@@ -32,6 +33,7 @@ const EditProfilePage = lazy(() => import("./pages/EditProfilePage"));
 const ExplorePage = lazy(() => import("./pages/ExplorePage"));
 const SearchPage = lazy(() => import("./pages/SearchPage"));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
+const MessagesPage = lazy(() => import("./pages/MessagesPage"));
 
 function PageLoader() {
   return <div className="p-8 text-center text-gray-500">Loading…</div>;
@@ -47,14 +49,17 @@ function ProtectedRoute({ children }) {
   return <>{children}</>;
 }
 
-function DashboardLayout({ children, onCreatePost, showCreatePost, onCloseCreatePost }) {
+function DashboardLayout({
+  children,
+  onCreatePost,
+  showCreatePost,
+  onCloseCreatePost,
+}) {
   return (
     <div className="app-bg min-h-screen">
       <Navbar />
       <Sidebar />
-      <main
-        className="lg:pl-[280px] xl:pr-[300px] lg:pt-[70px] pt-12 pb-16 lg:pb-0 min-h-screen"
-      >
+      <main className="lg:pl-[280px] xl:pr-[300px] lg:pt-[70px] pt-12 pb-16 lg:pb-0 min-h-screen">
         {children}
       </main>
       <RightSidebar />
@@ -68,18 +73,31 @@ function DashboardLayout({ children, onCreatePost, showCreatePost, onCloseCreate
 function SocketBridge() {
   // Initialize socket listeners from zustand stores
   useEffect(() => {
-    const { initSocketListeners, cleanupSocketListeners } = usePostStore.getState();
-    const { initSocketListeners: initNotifListeners, cleanupSocketListeners: cleanupNotifListeners } = useNotificationStore.getState();
-    const { initSocketListeners: initProfileListeners, cleanupSocketListeners: cleanupProfileListeners } = useProfileStore.getState();
+    const { initSocketListeners, cleanupSocketListeners } =
+      usePostStore.getState();
+    const {
+      initSocketListeners: initNotifListeners,
+      cleanupSocketListeners: cleanupNotifListeners,
+    } = useNotificationStore.getState();
+    const {
+      initSocketListeners: initProfileListeners,
+      cleanupSocketListeners: cleanupProfileListeners,
+    } = useProfileStore.getState();
+    const {
+      initSocketListeners: initChatListeners,
+      cleanupSocketListeners: cleanupChatListeners,
+    } = useChatStore.getState();
 
     initSocketListeners();
     initNotifListeners();
     initProfileListeners();
+    initChatListeners();
 
     return () => {
       cleanupSocketListeners();
       cleanupNotifListeners();
       cleanupProfileListeners();
+      cleanupChatListeners();
     };
   }, []);
 
@@ -91,12 +109,7 @@ function AppContent() {
   const isAuthPage = ["/login", "/register"].includes(location.pathname);
 
   const navigate = useNavigate();
-  const {
-    user,
-    isInitialized,
-    initialize,
-    forceLogoutReason,
-  } = useAuthStore();
+  const { user, isInitialized, initialize, forceLogoutReason } = useAuthStore();
   const { fetchNotifications } = useNotificationStore();
   const { fetchFeed } = usePostStore();
   const { fetchProfile } = useProfileStore();
@@ -214,6 +227,34 @@ function AppContent() {
                     onCloseCreatePost={() => setShowCreatePost(false)}
                   >
                     <NotificationsPage />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/messages"
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout
+                    onCreatePost={() => setShowCreatePost(true)}
+                    showCreatePost={showCreatePost}
+                    onCloseCreatePost={() => setShowCreatePost(false)}
+                  >
+                    <MessagesPage />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/messages/:conversationId"
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout
+                    onCreatePost={() => setShowCreatePost(true)}
+                    showCreatePost={showCreatePost}
+                    onCloseCreatePost={() => setShowCreatePost(false)}
+                  >
+                    <MessagesPage />
                   </DashboardLayout>
                 </ProtectedRoute>
               }

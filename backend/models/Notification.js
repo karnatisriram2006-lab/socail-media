@@ -15,7 +15,7 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['like', 'comment', 'follow'],
+      enum: ['like', 'comment', 'follow', 'message', 'post_share', 'profile_share'],
       required: true,
     },
     postId: {
@@ -39,6 +39,9 @@ notificationSchema.virtual('message').get(function () {
     like: 'liked your post',
     comment: 'commented on your post',
     follow: 'started following you',
+    message: 'sent you a message',
+    post_share: 'shared a post with you',
+    profile_share: 'shared a profile with you',
   };
   return messages[this.type] || 'interacted with you';
 });

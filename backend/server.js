@@ -75,6 +75,7 @@ io.on('connection', (socket) => {
   const userId = socket.userId;
   console.log(`[Socket] User connected: ${userId} (socket: ${socket.id})`);
 
+  socket.join(`user:${userId}`)
   global.onlineUsers.set(userId, socket.id);
 
   User.findByIdAndUpdate(userId, { isOnline: true, lastActive: new Date() }).catch((err) =>
@@ -96,7 +97,45 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Socket error handling
+  socket.on('joinConversation', ({ conversationId }) => {
+    if (conversationId) {
+      socket.join(`conversation:${conversationId}`);
+    }
+  });
+
+  socket.on('leaveConversation', ({ conversationId }) => {
+    if (conversationId) {
+      socket.leave(`conversation:${conversationId}`);
+    }
+  });
+
+  socket.on('typingStart', ({ conversationId }) => {
+    if (conversationId) {
+      socket.to(`conversation:${conversationId}`).emit('typingStart', {
+        conversationId,
+        userId,
+      });
+    }
+  });
+
+  socket.on('typingStop', ({ conversationId }) => {
+    if (conversationId) {
+      socket.to(`conversation:${conversationId}`).emit('typingStop', {
+        conversationId,
+        userId,
+      });
+    }
+  });
+
+  socket.on('messageSeen', ({ conversationId }) => {
+    if (conversationId) {
+      socket.to(`conversation:${conversationId}`).emit('messageSeen', {
+        conversationId,
+        userId,
+      });
+    }
+  });
+
   socket.on('error', (err) => {
     console.error('[Socket] Error:', err.message);
   });
@@ -156,6 +195,7 @@ app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/posts', require('./routes/postRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
+app.use('/api/chat', require('./routes/chatRoutes'));
 
 app.get('/', (req, res) => {
   res.status(200).json({
