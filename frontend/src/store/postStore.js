@@ -2,6 +2,29 @@ import { create } from 'zustand'
 import { getSocket } from '../services/socket'
 import API from '../services/api'
 
+// Backend returns populated user as `userId` (matches the Mongoose field name),
+// but the UI uses `user`. This normalizer maps the API shape onto the UI shape.
+const normalizePost = (post) => {
+  if (!post) return post
+  const user = post.user || post.userId || null
+  const likesArr = Array.isArray(post.likes) ? post.likes : []
+  return {
+    ...post,
+    user,
+    userId: user?._id || post.userId,
+    likesCount: post.likesCount ?? likesArr.length,
+    commentsCount: post.commentsCount ?? 0,
+    comments: post.comments || [],
+    isLiked: post.isLiked ?? false,
+    isSaved: post.isSaved ?? false,
+    sharesCount: post.sharesCount ?? 0,
+    image: post.image || post.imageUrl,
+    timeAgo: post.timeAgo,
+  }
+}
+
+const normalizeList = (arr) => Array.isArray(arr) ? arr.map(normalizePost) : []
+
 export const usePostStore = create((set, get) => ({
   posts: [],
   explorePosts: [],
@@ -19,7 +42,7 @@ export const usePostStore = create((set, get) => ({
     const currentPage = isLoadMore ? get().feedPage + 1 : 1
     try {
       const res = await API.get(`/api/posts/feed?page=${currentPage}`)
-      const newPosts = res.data
+      const newPosts = normalizeList(res.data)
       set((state) => ({
         posts: isLoadMore ? [...state.posts, ...newPosts] : newPosts,
         feedPage: currentPage,
@@ -36,7 +59,7 @@ export const usePostStore = create((set, get) => ({
     set({ loading: true, error: null })
     try {
       const res = await API.get('/api/posts/explore')
-      set({ explorePosts: res.data })
+      set({ explorePosts: normalizeList(res.data) })
     } catch (err) {
       set({ error: 'Failed to fetch explore posts' })
     } finally {
@@ -48,7 +71,7 @@ export const usePostStore = create((set, get) => ({
     set({ loading: true, error: null })
     try {
       const res = await API.get('/api/posts/saved')
-      set({ savedPosts: res.data })
+      set({ savedPosts: normalizeList(res.data) })
     } catch (err) {
       set({ error: 'Failed to fetch saved posts' })
     } finally {
@@ -65,7 +88,7 @@ export const usePostStore = create((set, get) => ({
       const res = await API.post('/api/posts', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
-      const newPost = res.data.post
+      const newPost = normalizePost(res.data.post)
       set((state) => ({
         posts: [newPost, ...state.posts],
       }))
@@ -111,7 +134,7 @@ export const usePostStore = create((set, get) => ({
       const res = await API.post(`/api/posts/${postId}/save`)
       set((state) => ({
         posts: state.posts.map((p) =>
-          p._id === postId ? { ...p, isSaved: res.data.isSaved } : p
+          p._id === postId ? { ...p, isSaved: res.data.saved } : p
         ),
       }))
     } catch (err) {
@@ -119,17 +142,49 @@ export const usePostStore = create((set, get) => ({
     }
   },
 
+  // Fetch comments for a post from the backend on demand
+  fetchComments: async (postId) => {
+    try {
+      const res = await API.get(`/api/posts/${postId}/comments`)
+      const list = (res.data || []).map((c) => ({
+        ...c,
+        user: c.user || c.userId || null,
+        text: c.text || c.comment,
+        createdAt: c.createdAt,
+      }))
+      set((state) => ({
+        posts: state.posts.map((p) =>
+          p._id === postId ? { ...p, comments: list } : p
+        ),
+      }))
+      return list
+    } catch (err) {
+      console.error('fetchComments error:', err)
+      return []
+    }
+  },
+
   addComment: async (postId, text) => {
     try {
-      const res = await API.post(`/api/posts/${postId}/comment`, { text })
+      const res = await API.post(`/api/posts/${postId}/comment`, { comment: text })
+      const raw = res.data.comment
+      const newComment = {
+        ...raw,
+        user: raw.user || raw.userId || null,
+        text: raw.text || raw.comment,
+      }
       set((state) => ({
         posts: state.posts.map((p) =>
           p._id === postId
-            ? { ...p, comments: [...(p.comments || []), res.data.comment] }
+            ? {
+                ...p,
+                commentsCount: res.data.commentsCount,
+                comments: [...(p.comments || []), newComment],
+              }
             : p
         ),
       }))
-      return res.data.comment
+      return newComment
     } catch (err) {
       set({ error: 'Failed to add comment' })
       throw err
@@ -142,7 +197,7 @@ export const usePostStore = create((set, get) => ({
       set((state) => ({
         posts: state.posts.map((p) =>
           p._id === postId
-            ? { ...p, comments: p.comments.filter((c) => c._id !== commentId) }
+            ? { ...p, comments: (p.comments || []).filter((c) => c._id !== commentId) }
             : p
         ),
       }))

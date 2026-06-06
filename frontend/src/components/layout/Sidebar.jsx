@@ -21,6 +21,8 @@ function Avatar({ name, src, size = 72 }) {
   ]
   const grad = colors[(initial.charCodeAt(0) || 0) % colors.length]
 
+  const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'U')}&background=random&color=fff&size=${size * 2}`
+
   if (!src || errored) {
     return (
       <div
@@ -36,7 +38,12 @@ function Avatar({ name, src, size = 72 }) {
     <img
       src={src}
       alt={name || 'avatar'}
-      onError={() => setErrored(true)}
+      onError={(e) => {
+        if (e.currentTarget.src !== fallbackUrl) {
+          e.currentTarget.src = fallbackUrl
+          setErrored(true)
+        }
+      }}
       className="rounded-full object-cover border-4 border-white shadow-sm shrink-0 bg-warm-100"
       style={{ width: size, height: size }}
     />
@@ -47,19 +54,17 @@ export default function Sidebar() {
   const { user } = useAuthStore()
   const navigate = useNavigate()
 
-  const profile = user
-  const name = profile?.name || profile?.username || 'User'
-  const handle = profile?.username || 'me'
-  const posts = profile?.postsCount ?? 250
-  const followers = profile?.followers?.length ?? 2022
-  const following = profile?.following?.length ?? 590
-  const avatar = profile?.profileImage
+  // Real user data with sensible defaults
+  const name = user?.name || user?.username || 'User'
+  const handle = user?.username || 'me'
+  const posts = user?.postsCount ?? user?.posts?.length ?? 0
+  const followers = user?.followersCount ?? user?.followers?.length ?? 0
+  const following = user?.followingCount ?? user?.following?.length ?? 0
+  const avatar = user?.profileImage
+  const cover = user?.coverImage || 'https://images.unsplash.com/photo-1503262028195-93c528f03218?w=800&q=80'
 
-  const cover = 'https://images.unsplash.com/photo-1503262028195-93c528f03218?w=800&q=80'
   const coverHeight = 70
   const avatarSize = 72
-  // Avatar sits so its center is on the cover/content boundary:
-  // top of cover (0) + cover height (70) - half of avatar (36) = 34
   const avatarTop = coverHeight - avatarSize / 2
 
   return (
@@ -80,7 +85,7 @@ export default function Sidebar() {
           </div>
         </div>
 
-        {/* Absolutely-positioned avatar overlapping the cover boundary */}
+        {/* Avatar overlapping cover */}
         <div
           className="absolute left-0 right-0 flex justify-center pointer-events-none"
           style={{ top: avatarTop }}
@@ -90,7 +95,7 @@ export default function Sidebar() {
           </div>
         </div>
 
-        {/* Content area with top padding to make room for the overlapping avatar */}
+        {/* Content */}
         <div className="px-4 pb-4 pt-10">
           <div className="mt-2 text-center">
             <h3 className="font-semibold text-sm text-gray-900 truncate">{name}</h3>
@@ -99,15 +104,21 @@ export default function Sidebar() {
 
           <div className="mt-3 flex items-center justify-between text-center">
             <div>
-              <div className="text-base font-bold text-gray-900">{posts}</div>
+              <div className="text-base font-bold text-gray-900">
+                {posts >= 1000 ? `${(posts / 1000).toFixed(1)}k` : posts}
+              </div>
               <div className="text-[11px] text-gray-500">Post</div>
             </div>
             <div>
-              <div className="text-base font-bold text-gray-900">{followers}</div>
+              <div className="text-base font-bold text-gray-900">
+                {followers >= 1000 ? `${(followers / 1000).toFixed(1)}k` : followers}
+              </div>
               <div className="text-[11px] text-gray-500">Followers</div>
             </div>
             <div>
-              <div className="text-base font-bold text-gray-900">{following}</div>
+              <div className="text-base font-bold text-gray-900">
+                {following >= 1000 ? `${(following / 1000).toFixed(1)}k` : following}
+              </div>
               <div className="text-[11px] text-gray-500">Following</div>
             </div>
           </div>
