@@ -3,6 +3,73 @@ const User = require('../models/User');
 const Comment = require('../models/Comment');
 const Notification = require('../models/Notification');
 
+// Helper function to enrich posts with user-specific data
+const enrichPosts = async (posts, currentUserId) => {
+  if (!posts || !posts.length) return posts;
+  
+  const userIdStr = currentUserId.toString();
+  
+  // Get user's saved posts for isSaved computation
+  const currentUser = await User.findById(currentUserId).select('savedPosts');
+  const savedPostIds = new Set(
+    currentUser?.savedPosts?.map(id => id.toString()) || []
+  );
+  
+  return posts.map(post => {
+    const postObj = post.toObject ? post.toObject() : post;
+    
+    // Compute isLiked
+    const isLiked = post.likes?.some(like => like.toString() === userIdStr) || false;
+    
+    // Compute isSaved
+    const isSaved = savedPostIds.has(post._id.toString());
+    
+    // Ensure likes are populated with user objects
+    const likes = post.likes && post.likes.length > 0 && typeof post.likes[0] === 'object' && post.likes[0]._id
+      ? post.likes
+      : post.likes; // Will be populated by caller
+    
+    return {
+      ...postObj,
+      user: postObj.userId || postObj.user, // Normalize to 'user' for frontend
+      userId: postObj.userId?._id || postObj.userId,
+      likes,
+      likesCount: post.likes?.length || 0,
+      isLiked,
+      isSaved,
+      commentsCount: postObj.commentsCount || 0,
+    };
+  });
+};
+
+// Helper to enrich a single post
+const enrichPost = async (post, currentUserId) => {
+  if (!post) return post;
+  
+  const userIdStr = currentUserId.toString();
+  
+  const currentUser = await User.findById(currentUserId).select('savedPosts');
+  const savedPostIds = new Set(
+    currentUser?.savedPosts?.map(id => id.toString()) || []
+  );
+  
+  const postObj = post.toObject ? post.toObject() : post;
+  
+  const isLiked = post.likes?.some(like => like.toString() === userIdStr) || false;
+  const isSaved = savedPostIds.has(post._id.toString());
+  
+  return {
+    ...postObj,
+    user: postObj.userId || postObj.user,
+    userId: postObj.userId?._id || postObj.userId,
+    likes: post.likes,
+    likesCount: post.likes?.length || 0,
+    isLiked,
+    isSaved,
+    commentsCount: postObj.commentsCount || 0,
+  };
+};
+
 exports.createPost = async (req, res) => {
   try {
     const { caption } = req.body;
@@ -22,15 +89,19 @@ exports.createPost = async (req, res) => {
       'username name profileImage isVerified'
     );
 
+    // Enrich with user-specific data
+    const enrichedPost = await enrichPost(populatedPost, req.user.id);
+
     if (global.io) {
-      global.io.emit('newPost', populatedPost);
+      global.io.emit('newPost', enrichedPost);
     }
 
     return res.status(201).json({
       message: 'Post created successfully',
-      post: populatedPost,
+      post: enrichedPost,
     });
   } catch (error) {
+    console.error('Create Post Error:', error);
     return res.status(500).json({ message: 'Server error during post creation', error: error.message });
   }
 };
@@ -57,6 +128,7 @@ exports.deletePost = async (req, res) => {
 
     return res.status(200).json({ message: 'Post deleted successfully' });
   } catch (error) {
+    console.error('Delete Post Error:', error);
     return res.status(500).json({ message: 'Server error during post deletion', error: error.message });
   }
 };
@@ -71,8 +143,12 @@ exports.getPostById = async (req, res) => {
       return res.status(404).json({ message: 'Post not found' });
     }
 
-    return res.status(200).json(post);
+    // Enrich with user-specific data
+    const enrichedPost = await enrichPost(post, req.user.id);
+
+    return res.status(200).json(enrichedPost);
   } catch (error) {
+    console.error('Get Post By ID Error:', error);
     return res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -86,10 +162,12 @@ exports.likeUnlikePost = async (req, res) => {
       return res.status(404).json({ message: 'Post not found' });
     }
 
-    const isLiked = post.likes.includes(userId);
+    // Check if user already liked this post
+    const isLiked = post.likes.some((id) => id.toString() === userId.toString());
 
     if (isLiked) {
-      post.likes = post.likes.filter((id) => id.toString() !== userId.toString());
+      // Unlike: Remove user from likes array using pull for atomicity
+      post.likes.pull(userId);
       await post.save();
 
       await Notification.findOneAndDelete({
@@ -99,16 +177,34 @@ exports.likeUnlikePost = async (req, res) => {
         type: 'like',
       });
 
-      const populatedLikes = await Post.findById(post._id).populate('likes', 'username name profileImage isVerified').select('likes');
+      // Reload post with populated likes
+      const updatedPost = await Post.findById(post._id)
+        .populate('userId', 'username name profileImage isVerified')
+        .populate('likes', 'username name profileImage isVerified');
+
+      const enrichedPost = await enrichPost(updatedPost, userId);
 
       if (global.io) {
-        global.io.emit('likeUpdate', { postId: post._id, likes: populatedLikes.likes });
+        global.io.emit('likeUpdate', { 
+          postId: post._id, 
+          likes: enrichedPost.likes,
+          likesCount: enrichedPost.likesCount,
+          isLiked: false,
+        });
       }
 
-      return res.status(200).json({ message: 'Post unliked', likes: populatedLikes.likes });
+      return res.status(200).json({ 
+        message: 'Post unliked', 
+        likes: enrichedPost.likes,
+        likesCount: enrichedPost.likesCount,
+        isLiked: false,
+      });
     } else {
-      post.likes.push(userId);
-      await post.save();
+      // Use addToSet to prevent duplicate likes (atomic operation)
+      if (!post.likes.includes(userId)) {
+        post.likes.addToSet(userId);
+        await post.save();
+      }
 
       if (post.userId.toString() !== userId.toString()) {
         const notification = await Notification.create({
@@ -131,15 +227,31 @@ exports.likeUnlikePost = async (req, res) => {
         }
       }
 
-      const populatedLikes = await Post.findById(post._id).populate('likes', 'username name profileImage isVerified').select('likes');
+      // Reload post with populated likes
+      const updatedPost = await Post.findById(post._id)
+        .populate('userId', 'username name profileImage isVerified')
+        .populate('likes', 'username name profileImage isVerified');
+
+      const enrichedPost = await enrichPost(updatedPost, userId);
 
       if (global.io) {
-        global.io.emit('likeUpdate', { postId: post._id, likes: populatedLikes.likes });
+        global.io.emit('likeUpdate', { 
+          postId: post._id, 
+          likes: enrichedPost.likes,
+          likesCount: enrichedPost.likesCount,
+          isLiked: true,
+        });
       }
 
-      return res.status(200).json({ message: 'Post liked', likes: populatedLikes.likes });
+      return res.status(200).json({ 
+        message: 'Post liked', 
+        likes: enrichedPost.likes,
+        likesCount: enrichedPost.likesCount,
+        isLiked: true,
+      });
     }
   } catch (error) {
+    console.error('Like/Unlike Error:', error);
     return res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -275,6 +387,7 @@ exports.getHomeFeed = async (req, res) => {
 
     let posts = await Post.find({ userId: { $in: feedUserIds } })
       .populate('userId', 'username name profileImage isVerified')
+      .populate('likes', 'username name profileImage isVerified')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
@@ -282,12 +395,17 @@ exports.getHomeFeed = async (req, res) => {
     if (posts.length === 0 && page === 1) {
       posts = await Post.find()
         .populate('userId', 'username name profileImage isVerified')
+        .populate('likes', 'username name profileImage isVerified')
         .sort({ createdAt: -1 })
         .limit(limit);
     }
 
-    return res.status(200).json(posts);
+    // Enrich posts with user-specific data
+    const enrichedPosts = await enrichPosts(posts, req.user.id);
+
+    return res.status(200).json(enrichedPosts);
   } catch (error) {
+    console.error('Get Home Feed Error:', error);
     return res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -300,12 +418,17 @@ exports.getExploreFeed = async (req, res) => {
 
     const posts = await Post.find({ userId: { $ne: req.user.id } })
       .populate('userId', 'username name profileImage isVerified')
+      .populate('likes', 'username name profileImage isVerified')
       .sort({ 'likes.length': -1, createdAt: -1 })
       .skip(skip)
       .limit(limit);
 
-    return res.status(200).json(posts);
+    // Enrich posts with user-specific data
+    const enrichedPosts = await enrichPosts(posts, req.user.id);
+
+    return res.status(200).json(enrichedPosts);
   } catch (error) {
+    console.error('Get Explore Feed Error:', error);
     return res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -323,10 +446,15 @@ exports.getUserPosts = async (req, res) => {
 
     const posts = await Post.find({ userId: user._id })
       .populate('userId', 'username name profileImage isVerified')
+      .populate('likes', 'username name profileImage isVerified')
       .sort({ createdAt: -1 });
 
-    return res.status(200).json(posts);
+    // Enrich posts with user-specific data
+    const enrichedPosts = await enrichPosts(posts, req.user.id);
+
+    return res.status(200).json(enrichedPosts);
   } catch (error) {
+    console.error('Get User Posts Error:', error);
     return res.status(500).json({ message: 'Server error', error: error.message });
   }
 };

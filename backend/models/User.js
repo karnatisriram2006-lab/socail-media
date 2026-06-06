@@ -71,10 +71,30 @@ const userSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
 
 // Indexes for search queries
 userSchema.index({ username: 'text', name: 'text' });
+
+// Virtual for followers count
+userSchema.virtual('followersCount').get(function () {
+  return this.followers ? this.followers.length : 0;
+});
+
+// Virtual for following count
+userSchema.virtual('followingCount').get(function () {
+  return this.following ? this.following.length : 0;
+});
+
+// Virtual for isFollowing (set dynamically in controller)
+userSchema.virtual('isFollowing').get(function () {
+  return this._isFollowing || false;
+});
+
+userSchema.set('toJSON', { virtuals: true });
+userSchema.set('toObject', { virtuals: true });
 
 module.exports = mongoose.model('User', userSchema);

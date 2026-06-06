@@ -8,11 +8,12 @@ import {
   useNavigate,
 } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
+import { auth } from "./config/firebase";
 import { useAuthStore } from "./store/authStore";
 import { useNotificationStore } from "./store/notificationStore";
 import { usePostStore } from "./store/postStore";
 import { useProfileStore } from "./store/profileStore";
-import { initSocket, disconnectSocket, getSocket } from "./services/socket";
+import { initSocket, disconnectSocket } from "./services/socket";
 import Navbar from "./components/layout/Navbar";
 import Sidebar from "./components/layout/Sidebar";
 import RightSidebar from "./components/layout/RightSidebar";
@@ -37,9 +38,12 @@ function PageLoader() {
 }
 
 function ProtectedRoute({ children }) {
-  const { user, isInitialized } = useAuthStore();
+  const { user, isInitialized, firebaseUser } = useAuthStore();
   if (!isInitialized) return <PageLoader />;
-  if (!user) return <Navigate to="/login" replace />;
+  // Accept either a loaded user OR a still-restoring Firebase session
+  if (!user && !firebaseUser && !auth.currentUser) {
+    return <Navigate to="/login" replace />;
+  }
   return <>{children}</>;
 }
 
@@ -49,7 +53,7 @@ function DashboardLayout({ children, onCreatePost, showCreatePost, onCloseCreate
       <Navbar />
       <Sidebar />
       <main
-        className="lg:pl-[280px] xl:pr-[300px] pt-[70px] min-h-screen"
+        className="lg:pl-[280px] xl:pr-[300px] lg:pt-[70px] pt-12 pb-16 lg:pb-0 min-h-screen"
       >
         {children}
       </main>
@@ -62,74 +66,24 @@ function DashboardLayout({ children, onCreatePost, showCreatePost, onCloseCreate
 }
 
 function SocketBridge() {
-  // Wire socket events to zustand stores for real-time updates
+  // Initialize socket listeners from zustand stores
   useEffect(() => {
-    const socket = getSocket()
-    if (!socket) return
+    const { initSocketListeners, cleanupSocketListeners } = usePostStore.getState();
+    const { initSocketListeners: initNotifListeners, cleanupSocketListeners: cleanupNotifListeners } = useNotificationStore.getState();
+    const { initSocketListeners: initProfileListeners, cleanupSocketListeners: cleanupProfileListeners } = useProfileStore.getState();
 
-    const handleNewPost = (post) => {
-      try {
-        usePostStore.setState((state) => ({
-          posts: [post, ...state.posts],
-        }))
-      } catch (e) { console.error(e) }
-    }
-    const handleNewLike = ({ postId, likesCount }) => {
-      try {
-        usePostStore.setState((state) => ({
-          posts: state.posts.map((p) =>
-            p._id === postId ? { ...p, likesCount } : p
-          ),
-        }))
-      } catch (e) { console.error(e) }
-    }
-    const handleNewComment = ({ postId, comment }) => {
-      try {
-        usePostStore.setState((state) => ({
-          posts: state.posts.map((p) =>
-            p._id === postId
-              ? { ...p, commentsCount: (p.commentsCount || 0) + 1, comments: [...(p.comments || []), comment] }
-              : p
-          ),
-        }))
-      } catch (e) { console.error(e) }
-    }
-    const handleNewFollow = () => {
-      try {
-        useNotificationStore.getState().fetchNotifications()
-      } catch (e) { console.error(e) }
-    }
-    const handleNewNotification = (n) => {
-      try {
-        useNotificationStore.setState((state) => ({
-          notifications: [n, ...state.notifications],
-          unreadCount: state.unreadCount + 1,
-        }))
-      } catch (e) { console.error(e) }
-    }
-    const handleUserStatus = ({ userId, isOnline }) => {
-      // Could update an online status map; not displayed in current UI
-      console.log('userStatus', userId, isOnline)
-    }
-
-    socket.on('newPost', handleNewPost)
-    socket.on('newLike', handleNewLike)
-    socket.on('newComment', handleNewComment)
-    socket.on('newFollow', handleNewFollow)
-    socket.on('newNotification', handleNewNotification)
-    socket.on('userStatusChange', handleUserStatus)
+    initSocketListeners();
+    initNotifListeners();
+    initProfileListeners();
 
     return () => {
-      socket.off('newPost', handleNewPost)
-      socket.off('newLike', handleNewLike)
-      socket.off('newComment', handleNewComment)
-      socket.off('newFollow', handleNewFollow)
-      socket.off('newNotification', handleNewNotification)
-      socket.off('userStatusChange', handleUserStatus)
-    }
-  }, [])
+      cleanupSocketListeners();
+      cleanupNotifListeners();
+      cleanupProfileListeners();
+    };
+  }, []);
 
-  return null
+  return null;
 }
 
 function AppContent() {
@@ -137,12 +91,18 @@ function AppContent() {
   const isAuthPage = ["/login", "/register"].includes(location.pathname);
 
   const navigate = useNavigate();
-  const { user, isInitialized, initialize, logout } = useAuthStore();
+  const {
+    user,
+    isInitialized,
+    initialize,
+    forceLogoutReason,
+  } = useAuthStore();
   const { fetchNotifications } = useNotificationStore();
   const { fetchFeed } = usePostStore();
   const { fetchProfile } = useProfileStore();
   const [showCreatePost, setShowCreatePost] = useState(false);
   const initializeRef = React.useRef(false);
+  const didInitialFetchRef = React.useRef(false);
 
   // Initialize auth only once on app load
   useEffect(() => {
@@ -152,34 +112,35 @@ function AppContent() {
     }
   }, [initialize]);
 
+  // Handle force-logout signal
+  useEffect(() => {
+    if (forceLogoutReason && !isAuthPage) {
+      navigate("/login", { replace: true });
+    }
+  }, [forceLogoutReason, isAuthPage, navigate]);
+
   // Handle post-login logic and navigation
   useEffect(() => {
     if (!isInitialized) return;
 
-    const sessionError = sessionStorage.getItem("authError");
-    if (sessionError && user) {
-      sessionStorage.removeItem("authError");
-      logout();
-      return;
-    }
-
     if (user) {
-      initSocket().catch(console.error);
-      fetchNotifications();
-      fetchFeed();
-      fetchProfile(user.username);
-
+      if (!didInitialFetchRef.current) {
+        didInitialFetchRef.current = true;
+        initSocket().catch(console.error);
+        fetchNotifications();
+        fetchFeed();
+        fetchProfile(user.username);
+      }
       if (isAuthPage) {
         navigate("/app", { replace: true });
       }
     } else {
+      didInitialFetchRef.current = false;
       disconnectSocket();
       if (!["/", "/login", "/register"].includes(location.pathname)) {
         navigate("/login", { replace: true });
       }
     }
-
-    return () => disconnectSocket();
   }, [
     user,
     isInitialized,
@@ -189,7 +150,6 @@ function AppContent() {
     fetchNotifications,
     fetchFeed,
     fetchProfile,
-    logout,
   ]);
 
   return (

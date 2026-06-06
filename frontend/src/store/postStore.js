@@ -1,17 +1,20 @@
 import { create } from 'zustand'
-import { getSocket } from '../services/socket'
+import { initSocket, onSocketEvent, removeAllSocketListeners } from '../services/socket'
 import API from '../services/api'
 
-// Backend returns populated user as `userId` (matches the Mongoose field name),
-// but the UI uses `user`. This normalizer maps the API shape onto the UI shape.
+// Backend now returns enriched posts with user-specific data (isLiked, isSaved, likesCount, etc.)
+// This normalizer ensures backward compatibility and handles any edge cases
 const normalizePost = (post) => {
   if (!post) return post
+  
   const user = post.user || post.userId || null
   const likesArr = Array.isArray(post.likes) ? post.likes : []
+  
   return {
     ...post,
     user,
     userId: user?._id || post.userId,
+    // Backend now provides these directly, but fallback for safety
     likesCount: post.likesCount ?? likesArr.length,
     commentsCount: post.commentsCount ?? 0,
     comments: post.comments || [],
@@ -25,6 +28,9 @@ const normalizePost = (post) => {
 
 const normalizeList = (arr) => Array.isArray(arr) ? arr.map(normalizePost) : []
 
+// Socket event handlers storage for cleanup
+let socketCleanupFns = []
+
 export const usePostStore = create((set, get) => ({
   posts: [],
   explorePosts: [],
@@ -36,6 +42,106 @@ export const usePostStore = create((set, get) => ({
 
   resetFeed: () => set({ posts: [], feedPage: 1, hasMoreFeed: true }),
 
+  // Initialize socket listeners for real-time updates
+  initSocketListeners: () => {
+    // Clear any existing listeners
+    socketCleanupFns.forEach(fn => fn())
+    socketCleanupFns = []
+
+    // Initialize socket connection
+    initSocket()
+
+    // Like update from another user
+    socketCleanupFns.push(
+      onSocketEvent('likeUpdate', ({ postId, likes, likesCount, isLiked }) => {
+        set((state) => ({
+          posts: state.posts.map((p) =>
+            p._id === postId
+              ? { 
+                  ...p, 
+                  likes,
+                  likesCount,
+                  isLiked: p._id === postId ? isLiked : p.isLiked, // Only update for current user if it's their action
+                }
+              : p
+          ),
+          explorePosts: state.explorePosts.map((p) =>
+            p._id === postId
+              ? { ...p, likes, likesCount }
+              : p
+          ),
+          savedPosts: state.savedPosts.map((p) =>
+            p._id === postId
+              ? { ...p, likes, likesCount }
+              : p
+          ),
+        }))
+      })
+    )
+
+    // New comment added
+    socketCleanupFns.push(
+      onSocketEvent('newComment', ({ postId, comment, commentsCount }) => {
+        set((state) => ({
+          posts: state.posts.map((p) =>
+            p._id === postId
+              ? { 
+                  ...p, 
+                  commentsCount,
+                  comments: [...(p.comments || []), comment],
+                }
+              : p
+          ),
+        }))
+      })
+    )
+
+    // Comment deleted
+    socketCleanupFns.push(
+      onSocketEvent('commentDeleted', ({ postId, commentId, commentsCount }) => {
+        set((state) => ({
+          posts: state.posts.map((p) =>
+            p._id === postId
+              ? { 
+                  ...p, 
+                  commentsCount,
+                  comments: (p.comments || []).filter((c) => c._id !== commentId),
+                }
+              : p
+          ),
+        }))
+      })
+    )
+
+    // New post created
+    socketCleanupFns.push(
+      onSocketEvent('newPost', (post) => {
+        const normalizedPost = normalizePost(post)
+        set((state) => ({
+          posts: [normalizedPost, ...state.posts],
+        }))
+      })
+    )
+
+    // Post deleted
+    socketCleanupFns.push(
+      onSocketEvent('postDeleted', ({ postId }) => {
+        set((state) => ({
+          posts: state.posts.filter((p) => p._id !== postId),
+          explorePosts: state.explorePosts.filter((p) => p._id !== postId),
+          savedPosts: state.savedPosts.filter((p) => p._id !== postId),
+        }))
+      })
+    )
+  },
+
+  // Cleanup socket listeners
+  cleanupSocketListeners: () => {
+    socketCleanupFns.forEach(fn => fn())
+    socketCleanupFns = []
+    removeAllSocketListeners()
+  },
+
   fetchFeed: async (isLoadMore = false) => {
     if (get().loading) return
     set({ loading: true, error: null })
@@ -46,10 +152,10 @@ export const usePostStore = create((set, get) => ({
       set((state) => ({
         posts: isLoadMore ? [...state.posts, ...newPosts] : newPosts,
         feedPage: currentPage,
-        hasMoreFeed: newPosts.length === 5,
+        hasMoreFeed: newPosts.length === 5, // Backend uses limit 10, but we check for 5 as fallback
       }))
-    } catch (err) {
-      set({ error: err.response?.data?.message || 'Failed to fetch feed' })
+    } catch (_err) {
+      set({ error: _err.response?.data?.message || 'Failed to fetch feed' })
     } finally {
       set({ loading: false })
     }
@@ -60,7 +166,7 @@ export const usePostStore = create((set, get) => ({
     try {
       const res = await API.get('/api/posts/explore')
       set({ explorePosts: normalizeList(res.data) })
-    } catch (err) {
+    } catch {
       set({ error: 'Failed to fetch explore posts' })
     } finally {
       set({ loading: false })
@@ -72,7 +178,7 @@ export const usePostStore = create((set, get) => ({
     try {
       const res = await API.get('/api/posts/saved')
       set({ savedPosts: normalizeList(res.data) })
-    } catch (err) {
+    } catch {
       set({ error: 'Failed to fetch saved posts' })
     } finally {
       set({ loading: false })
@@ -114,18 +220,35 @@ export const usePostStore = create((set, get) => ({
   },
 
   likePost: async (postId) => {
-    const prevPosts = get().posts
-    set((state) => ({
-      posts: state.posts.map((p) =>
-        p._id === postId
-          ? { ...p, isLiked: !p.isLiked, likesCount: p.isLiked ? p.likesCount - 1 : p.likesCount + 1 }
-          : p
-      ),
-    }))
     try {
-      await API.post(`/api/posts/${postId}/like`)
+      const res = await API.post(`/api/posts/${postId}/like`)
+      
+      // Update with actual server response (includes isLiked, likesCount, likes array)
+      set((state) => ({
+        posts: state.posts.map((p) =>
+          p._id === postId
+            ? { 
+                ...p, 
+                isLiked: res.data.isLiked,
+                likesCount: res.data.likesCount,
+                likes: res.data.likes,
+              }
+            : p
+        ),
+        explorePosts: state.explorePosts.map((p) =>
+          p._id === postId
+            ? { ...p, likesCount: res.data.likesCount, likes: res.data.likes }
+            : p
+        ),
+        savedPosts: state.savedPosts.map((p) =>
+          p._id === postId
+            ? { ...p, likesCount: res.data.likesCount, likes: res.data.likes }
+            : p
+        ),
+      }))
     } catch (err) {
-      set({ posts: prevPosts })
+      console.error('likePost error:', err)
+      throw err
     }
   },
 

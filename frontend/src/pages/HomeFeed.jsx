@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Image as ImageIcon, Video, BarChart2, Smile, Globe, ChevronDown } from 'lucide-react'
 import PostCard from '../components/post/PostCard'
@@ -7,6 +7,8 @@ import { PostSkeleton } from '../components/common/Skeleton'
 import EmptyState from '../components/common/EmptyState'
 import { useAuthStore } from '../store/authStore'
 import { usePostStore } from '../store/postStore'
+import { useProfileStore } from '../store/profileStore'
+import { useNotificationStore } from '../store/notificationStore'
 
 function CreatePostCard({ onOpen }) {
   const { user } = useAuthStore()
@@ -118,10 +120,27 @@ function FeedControls({ sort, onChange }) {
 }
 
 export default function HomeFeed() {
-  const { posts, loading, error, fetchFeed, hasMoreFeed } = usePostStore()
+  const { posts, loading, error, fetchFeed, hasMoreFeed, initSocketListeners, cleanupSocketListeners } = usePostStore()
+  const { initSocketListeners: initProfileListeners, cleanupSocketListeners: cleanupProfileListeners } = useProfileStore()
+  const { initSocketListeners: initNotifListeners, cleanupSocketListeners: cleanupNotifListeners } = useNotificationStore()
+  const { user } = useAuthStore()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [sort, setSort] = useState('Recent')
   const observerRef = useRef(null)
+
+  // Initialize socket listeners on mount
+  useEffect(() => {
+    if (user) {
+      initSocketListeners()
+      initProfileListeners()
+      initNotifListeners()
+    }
+    return () => {
+      cleanupSocketListeners()
+      cleanupProfileListeners()
+      cleanupNotifListeners()
+    }
+  }, [user, initSocketListeners, cleanupSocketListeners, initProfileListeners, cleanupProfileListeners, initNotifListeners, cleanupNotifListeners])
 
   // Infinite scroll
   const lastPostRef = useCallback(

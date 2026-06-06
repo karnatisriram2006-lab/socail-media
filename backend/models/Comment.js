@@ -23,7 +23,17 @@ const commentSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
+
+// Virtual for 'text' field to match frontend expectation
+commentSchema.virtual('text').get(function () {
+  return this.comment;
+});
+
+commentSchema.set('toJSON', { virtuals: true });
+commentSchema.set('toObject', { virtuals: true });
 
 module.exports = mongoose.model('Comment', commentSchema);
