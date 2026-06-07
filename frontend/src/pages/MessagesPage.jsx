@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { MessageCircle } from "lucide-react";
 import { useAuthStore } from "../store/authStore";
 import { useChatStore } from "../store/chatStore";
 import ChatSidebar from "../components/chat/ChatSidebar";
@@ -76,23 +77,23 @@ export default function MessagesPage() {
 
   const handleSelectUser = async (profile) => {
     try {
-      const conversation = await createConversation(profile._id);
+      const conv = await createConversation(profile._id);
       setSearchTerm("");
-      navigate(`/messages/${conversation._id}`);
+      navigate(`/messages/${conv._id}`);
     } catch (err) {
       console.error(err);
     }
   };
 
-  const handleSearchChange = async (value) => {
+  const handleSearchChange = (value) => {
     setSearchTerm(value);
-    searchUsers(value);
+    if (value) searchUsers(value);
   };
 
-  const handleSendMessage = async (conversationId, payload) => {
+  const handleSendMessage = async (convId, payload) => {
     try {
-      await sendMessage(conversationId, payload);
-      emitTyping(conversationId, "stop");
+      await sendMessage(convId, payload);
+      emitTyping(convId, "stop");
     } catch (err) {
       console.error(err);
     }
@@ -103,34 +104,56 @@ export default function MessagesPage() {
     emitTyping(conversationId, action);
   };
 
-  return (
-    <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
-      <ChatSidebar
-        conversations={conversations}
-        currentConversationId={conversationId || currentConversationId}
-        onSelectConversation={handleSelectConversation}
-        searchTerm={searchTerm}
-        onChangeSearchTerm={handleSearchChange}
-        onSearchUser={searchUsers}
-        searchResults={searchResults}
-        onSelectUser={handleSelectUser}
-        isLoading={loading}
-        typingUsers={typingUsers}
-      />
+  // On mobile: if we have a conversation selected, hide sidebar
+  const showSidebar = !conversationId;
+  const showChat = !!conversationId;
 
-      <div className="flex h-full flex-col gap-4">
+  return (
+    <div className="h-[calc(100vh-70px)] lg:h-[calc(100vh-70px)] flex">
+      {/* Left sidebar - 30% on desktop, full on mobile */}
+      <div
+        className={`${
+          showChat ? "hidden lg:flex" : "flex"
+        } w-full lg:w-[380px] xl:w-[400px] shrink-0 flex-col`}
+      >
+        <ChatSidebar
+          conversations={conversations}
+          currentConversationId={conversationId || currentConversationId}
+          onSelectConversation={handleSelectConversation}
+          searchTerm={searchTerm}
+          onChangeSearchTerm={handleSearchChange}
+          onSearchUser={searchUsers}
+          searchResults={searchResults}
+          onSelectUser={handleSelectUser}
+          isLoading={loading}
+          typingUsers={typingUsers}
+        />
+      </div>
+
+      {/* Right chat area - 70% on desktop */}
+      <div
+        className={`${
+          showSidebar && !conversationId ? "hidden lg:flex" : "flex"
+        } flex-1 flex-col min-w-0 bg-[#F5F5F7]`}
+      >
         {!hasInitialized ? (
-          <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center text-slate-500 shadow-sm">
-            Loading messages…
+          <div className="flex-1 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-sm text-gray-500">Loading messages...</p>
+            </div>
           </div>
         ) : !activeConversation ? (
-          <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center text-slate-500 shadow-sm">
-            <p className="text-lg font-semibold text-slate-900">
-              No conversation selected
-            </p>
-            <p className="mt-2 text-sm text-slate-500">
-              Search for a user and start a private conversation.
-            </p>
+          <div className="flex-1 flex items-center justify-center">
+            <div className="flex flex-col items-center text-center max-w-sm">
+              <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mb-5">
+                <MessageCircle className="w-8 h-8 text-gray-400" />
+              </div>
+              <h2 className="text-xl font-semibold text-gray-900">Your messages</h2>
+              <p className="text-sm text-gray-500 mt-2">
+                Select a conversation or start a new one
+              </p>
+            </div>
           </div>
         ) : (
           <ChatWindow
@@ -145,7 +168,7 @@ export default function MessagesPage() {
         )}
 
         {error && (
-          <div className="rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="border-t border-red-100 bg-red-50 px-4 py-2 text-sm text-red-600">
             {error}
           </div>
         )}

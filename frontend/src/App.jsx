@@ -34,6 +34,7 @@ const ExplorePage = lazy(() => import("./pages/ExplorePage"));
 const SearchPage = lazy(() => import("./pages/SearchPage"));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
 const MessagesPage = lazy(() => import("./pages/MessagesPage"));
+const PostDetailPage = lazy(() => import("./pages/PostDetailPage"));
 
 function PageLoader() {
   return <div className="p-8 text-center text-gray-500">Loading…</div>;
@@ -63,6 +64,25 @@ function DashboardLayout({
         {children}
       </main>
       <RightSidebar />
+      <MobileNav onCreatePostClick={onCreatePost} />
+      <ScrollToTop />
+      {showCreatePost && <CreatePostModal onClose={onCloseCreatePost} />}
+    </div>
+  );
+}
+
+function MessagesLayout({
+  children,
+  onCreatePost,
+  showCreatePost,
+  onCloseCreatePost,
+}) {
+  return (
+    <div className="app-bg min-h-screen">
+      <Navbar />
+      <main className="lg:pt-[70px] pt-12 min-h-screen">
+        {children}
+      </main>
       <MobileNav onCreatePostClick={onCreatePost} />
       <ScrollToTop />
       {showCreatePost && <CreatePostModal onClose={onCloseCreatePost} />}
@@ -235,13 +255,13 @@ function AppContent() {
               path="/messages"
               element={
                 <ProtectedRoute>
-                  <DashboardLayout
+                  <MessagesLayout
                     onCreatePost={() => setShowCreatePost(true)}
                     showCreatePost={showCreatePost}
                     onCloseCreatePost={() => setShowCreatePost(false)}
                   >
                     <MessagesPage />
-                  </DashboardLayout>
+                  </MessagesLayout>
                 </ProtectedRoute>
               }
             />
@@ -249,13 +269,13 @@ function AppContent() {
               path="/messages/:conversationId"
               element={
                 <ProtectedRoute>
-                  <DashboardLayout
+                  <MessagesLayout
                     onCreatePost={() => setShowCreatePost(true)}
                     showCreatePost={showCreatePost}
                     onCloseCreatePost={() => setShowCreatePost(false)}
                   >
                     <MessagesPage />
-                  </DashboardLayout>
+                  </MessagesLayout>
                 </ProtectedRoute>
               }
             />
@@ -269,6 +289,20 @@ function AppContent() {
                     onCloseCreatePost={() => setShowCreatePost(false)}
                   >
                     <ProfilePage />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/post/:postId"
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout
+                    onCreatePost={() => setShowCreatePost(true)}
+                    showCreatePost={showCreatePost}
+                    onCloseCreatePost={() => setShowCreatePost(false)}
+                  >
+                    <PostDetailPage />
                   </DashboardLayout>
                 </ProtectedRoute>
               }

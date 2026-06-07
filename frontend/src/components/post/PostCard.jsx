@@ -12,6 +12,7 @@ import { usePostStore } from "../../store/postStore";
 import { useAuthStore } from "../../store/authStore";
 import { useProfileStore } from "../../store/profileStore";
 import { useToast } from "../ui/Toast";
+import ShareModal from "../chat/ShareModal";
 
 function timeAgo(dateStr) {
   if (!dateStr) return "";
@@ -81,6 +82,7 @@ export default function PostCard({ post }) {
 
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
+  const [showShareModal, setShowShareModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingComments, setLoadingComments] = useState(false);
   const [popHeart, setPopHeart] = useState(false);
@@ -344,7 +346,7 @@ export default function PostCard({ post }) {
             <MessageCircle className="w-7 h-7 text-gray-900" />
           </button>
           <button
-            onClick={handleSave}
+            onClick={() => setShowShareModal(true)}
             className="hover:opacity-60 transition-opacity"
           >
             <Send className="w-7 h-7 text-gray-900" />
@@ -495,6 +497,13 @@ export default function PostCard({ post }) {
           </button>
         )}
       </form>
+      {/* Share Modal */}
+      {showShareModal && (
+        <ShareModal
+          post={post}
+          onClose={() => setShowShareModal(false)}
+        />
+      )}
     </motion.div>
   );
 }

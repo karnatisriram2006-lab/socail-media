@@ -72,7 +72,7 @@ exports.getMessages = async (req, res) => {
     .skip((page - 1) * limit)
     .limit(limit)
     .populate('sender', 'username name profileImage')
-    .populate('sharedPost')
+    .populate({ path: 'sharedPost', populate: { path: 'userId', select: 'username name profileImage' } })
     .populate('sharedProfile', 'username name profileImage');
 
   return res.status(200).json(messages.reverse());
@@ -115,7 +115,7 @@ exports.sendMessage = async (req, res) => {
   });
 
   await message.populate('sender', 'username name profileImage');
-  await message.populate('sharedPost');
+  await message.populate({ path: 'sharedPost', populate: { path: 'userId', select: 'username name profileImage' } });
   await message.populate('sharedProfile', 'username name profileImage');
 
   const lastMessageText =

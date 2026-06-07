@@ -1,12 +1,7 @@
 import { motion } from "framer-motion";
-import {
-  Clock3,
-  Check,
-  CheckCircle2,
-  Heart,
-  Share2,
-  MoreHorizontal,
-} from "lucide-react";
+import { useState } from "react";
+import { Check, CheckCheck, Heart, Reply, MoreHorizontal, Trash2 } from "lucide-react";
+import SharedPostCard from "./SharedPostCard";
 
 const friendlyTime = (timestamp) => {
   if (!timestamp) return "";
@@ -14,95 +9,162 @@ const friendlyTime = (timestamp) => {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
 
-export default function ChatMessage({ message, isMine }) {
-  const bubbleClass = isMine
-    ? "bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-2xl shadow-cyan-500/20"
-    : "bg-slate-900 text-slate-100 border border-slate-800 shadow-sm";
+export default function ChatMessage({
+  message,
+  isMine,
+  grouped = false,
+  onReply,
+  onReact,
+  onDelete,
+}) {
+  const [liked, setLiked] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+
+  const handleLike = () => {
+    setLiked((prev) => !prev);
+    onReact?.(message._id, !liked);
+  };
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      className={`flex ${isMine ? "justify-end" : "justify-start"} px-1`}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.15, ease: "easeOut" }}
+      className={`flex ${isMine ? "justify-end" : "justify-start"} ${grouped ? "mt-0.5" : "mt-2"}`}
     >
-      <div className={`group max-w-[84%] rounded-[32px] p-4 ${bubbleClass}`}>
-        {message.sender && !isMine && (
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-300 opacity-90">
-            {message.sender.name || message.sender.username}
-          </p>
+      <div className="group relative max-w-[75%] flex items-end gap-1.5">
+        {/* Avatar for incoming (first in group) */}
+        {!isMine && !grouped && (
+          <div className="w-7 h-7 rounded-full overflow-hidden bg-gray-200 shrink-0 mb-1">
+            <img
+              src={
+                message.sender?.profileImage ||
+                `https://ui-avatars.com/api/?name=${encodeURIComponent(message.sender?.name || message.sender?.username || "U")}&background=e4e6eb&color=1a1a1a&size=28`
+              }
+              alt=""
+              className="w-full h-full object-cover"
+            />
+          </div>
         )}
+        {!isMine && grouped && <div className="w-7 shrink-0" />}
 
-        {message.messageType === "image" && message.imageUrl ? (
-          <img
-            src={message.imageUrl}
-            alt="Sent image"
-            className="mb-3 min-h-[140px] w-full rounded-[28px] object-cover"
-          />
-        ) : null}
-
-        {message.messageType === "post" ? (
-          <div className="mb-3 rounded-[28px] border border-dashed border-slate-700 bg-slate-950/90 p-4 text-sm text-slate-200">
-            <div className="mb-1 text-sm font-semibold text-white">
-              Shared a post
-            </div>
-            <p className="text-[13px] text-slate-400">
-              Open this message to view the shared post.
-            </p>
+        {/* Actions (left side for mine, right side for theirs) */}
+        <div className={`flex ${isMine ? "order-first" : "order-last"} items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity`}>
+          <button
+            onClick={handleLike}
+            className={`p-1.5 rounded-full hover:bg-gray-100 transition ${liked ? "text-red-500" : "text-gray-400"}`}
+            title={liked ? "Unlike" : "Like"}
+          >
+            <Heart className="w-3.5 h-3.5" fill={liked ? "currentColor" : "none"} />
+          </button>
+          <button
+            onClick={() => onReply?.(message)}
+            className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 transition"
+            title="Reply"
+          >
+            <Reply className="w-3.5 h-3.5" />
+          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowMenu((prev) => !prev)}
+              className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 transition"
+              title="More"
+            >
+              <MoreHorizontal className="w-3.5 h-3.5" />
+            </button>
+            {showMenu && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
+                <div className={`absolute ${isMine ? "right-0" : "left-0"} bottom-full mb-1 z-20 bg-white rounded-xl shadow-lg border border-gray-200 py-1 min-w-[140px]`}>
+                  <button
+                    onClick={() => { onDelete?.(message._id); setShowMenu(false); }}
+                    className="flex items-center gap-2 px-4 py-2 text-sm text-red-500 hover:bg-red-50 w-full transition"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    {isMine ? "Unsend" : "Delete"}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
-        ) : null}
-
-        {message.messageType === "profile" ? (
-          <div className="mb-3 rounded-[28px] border border-dashed border-slate-700 bg-slate-950/90 p-4 text-sm text-slate-200">
-            <div className="mb-1 text-sm font-semibold text-white">
-              Shared a profile
-            </div>
-            <p className="text-[13px] text-slate-400">
-              {message.sharedProfile?.username || "Profile shared"}
-            </p>
-          </div>
-        ) : null}
-
-        <p className="whitespace-pre-wrap break-words text-sm leading-6">
-          {message.content ||
-            (message.messageType === "image" ? "Sent an image" : "")}
-        </p>
-
-        <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-slate-300">
-          <span className="inline-flex items-center gap-1 opacity-90">
-            <Clock3 className="h-3.5 w-3.5" />
-            {friendlyTime(message.createdAt)}
-          </span>
-          {isMine && (
-            <span className="inline-flex items-center gap-1 text-slate-200 opacity-90">
-              {message.pending ? (
-                <span className="inline-flex items-center gap-1 text-yellow-300">
-                  <span className="h-1.5 w-1.5 rounded-full bg-yellow-300 animate-pulse" />{" "}
-                  Sending
-                </span>
-              ) : message.isSeen ? (
-                <span className="inline-flex items-center gap-1 text-emerald-200">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Seen
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 text-slate-300">
-                  <Check className="h-3.5 w-3.5" /> Delivered
-                </span>
-              )}
-            </span>
-          )}
         </div>
 
-        <div className="mt-3 hidden items-center justify-end gap-3 text-slate-400 opacity-0 transition group-hover:flex">
-          <button className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-white/5 transition hover:bg-white/10">
-            <Heart className="h-4 w-4" />
-          </button>
-          <button className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-white/5 transition hover:bg-white/10">
-            <Share2 className="h-4 w-4" />
-          </button>
-          <button className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-white/5 transition hover:bg-white/10">
-            <MoreHorizontal className="h-4 w-4" />
-          </button>
+        {/* Reply indicator */}
+        {message.replyTo && (
+          <div
+            className={`${isMine ? "order-first mr-2" : "order-last ml-2"} self-end mb-1`}
+          >
+            <div className={`text-[11px] ${isMine ? "text-blue-200" : "text-gray-500"} italic max-w-[160px] truncate`}>
+              Replying to {message.replyTo.sender?.name || "a message"}
+            </div>
+          </div>
+        )}
+
+        {/* Bubble */}
+        <div className="flex flex-col">
+          {/* Shared post card */}
+          {message.messageType === "post" && message.sharedPost && (
+            <div className="mb-1">
+              <SharedPostCard post={message.sharedPost} compact />
+            </div>
+          )}
+          {message.messageType === "post" && !message.sharedPost && (
+            <div className="mb-1 rounded-xl border border-gray-200 bg-gray-50 p-3 text-center">
+              <p className="text-xs text-gray-500">Post unavailable</p>
+            </div>
+          )}
+          {message.messageType === "profile" && (
+            <div className={`mb-1 rounded-xl border ${isMine ? "border-blue-400/30 bg-blue-600" : "border-gray-200 bg-white"} p-3 shadow-sm`}>
+              <p className={`text-xs font-semibold ${isMine ? "text-white" : "text-gray-900"}`}>
+                👤 Shared a profile
+              </p>
+              <p className={`text-[11px] mt-0.5 ${isMine ? "text-blue-200" : "text-gray-500"}`}>
+                @{message.sharedProfile?.username || "username"}
+              </p>
+            </div>
+          )}
+
+          {/* Image */}
+          {message.messageType === "image" && message.imageUrl && (
+            <img
+              src={message.imageUrl}
+              alt="Sent image"
+              className="mb-1 rounded-xl max-w-[260px] w-full object-cover cursor-pointer"
+              loading="lazy"
+            />
+          )}
+
+          {/* Text bubble */}
+          {message.content && (
+            <div
+              className={`relative px-3.5 py-2 text-sm leading-5 ${
+                isMine
+                  ? "bg-blue-500 text-white rounded-2xl rounded-br-sm"
+                  : "bg-gray-100 text-gray-900 rounded-2xl rounded-bl-sm"
+              }`}
+            >
+              <p className="whitespace-pre-wrap break-words">{message.content}</p>
+            </div>
+          )}
+
+          {/* Timestamp + status */}
+          <div className={`flex items-center gap-1 mt-0.5 ${isMine ? "justify-end mr-1" : "justify-start ml-1"}`}>
+            <span className={`text-[10px] ${isMine ? "text-gray-400" : "text-gray-400"}`}>
+              {friendlyTime(message.createdAt)}
+            </span>
+            {isMine && (
+              <span className="inline-flex items-center">
+                {message.pending ? (
+                  <span className="text-[10px] text-gray-400">Sending...</span>
+                ) : message.isSeen ? (
+                  <CheckCheck className="w-3 h-3 text-blue-500" />
+                ) : (
+                  <Check className="w-3 h-3 text-gray-400" />
+                )}
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </motion.div>
