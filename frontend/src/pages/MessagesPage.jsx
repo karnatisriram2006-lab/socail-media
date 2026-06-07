@@ -108,8 +108,20 @@ export default function MessagesPage() {
   const showSidebar = !conversationId;
   const showChat = !!conversationId;
 
+  // Mobile layout heights:
+  //   - top mobile header: 48px
+  //   - bottom mobile nav: 56px (+ safe-area)
+  // Desktop:
+  //   - top navbar: 70px
+  // So on mobile the chat should fit `100vh - 48px - 56px = 100vh - 104px`,
+  // and on lg+ it should fit `100vh - 70px`.
+  // We also add safe-area-inset-bottom so the input clears the iOS home indicator.
+  const containerHeight =
+    "h-[calc(100vh-104px-env(safe-area-inset-bottom))] " +
+    "lg:h-[calc(100vh-70px)]";
+
   return (
-    <div className="h-[calc(100vh-70px)] lg:h-[calc(100vh-70px)] flex">
+    <div className={`${containerHeight} flex`}>
       {/* Left sidebar - 30% on desktop, full on mobile */}
       <div
         className={`${
@@ -130,7 +142,7 @@ export default function MessagesPage() {
         />
       </div>
 
-      {/* Right chat area - 70% on desktop */}
+      {/* Right chat area - 70% on desktop, full on mobile */}
       <div
         className={`${
           showSidebar && !conversationId ? "hidden lg:flex" : "flex"

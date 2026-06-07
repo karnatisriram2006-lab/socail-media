@@ -5,6 +5,8 @@ import API from '../services/api'
 // Socket event handlers storage for cleanup
 let socketCleanupFns = []
 
+const emptyFollowList = () => ({ list: [], total: 0, page: 1, hasMore: false, loading: false })
+
 export const useProfileStore = create((set, get) => ({
   profile: null,
   posts: [],
@@ -13,6 +15,10 @@ export const useProfileStore = create((set, get) => ({
   followState: {},
   loading: false,
   error: null,
+
+  // Followers / Following list state
+  followersList: emptyFollowList(),
+  followingList: emptyFollowList(),
 
   // Initialize socket listeners for real-time follow updates
   initSocketListeners: () => {
@@ -26,16 +32,18 @@ export const useProfileStore = create((set, get) => ({
     // Follow update from another user
     socketCleanupFns.push(
       onSocketEvent('followUpdate', ({ targetUserId, currentUserId, isFollowing, followersCount, followingCount }) => {
-        set((state) => ({
-          profile: state.profile && state.profile._id === targetUserId
-            ? {
-                ...state.profile,
-                isFollowing: state.profile._id === currentUserId ? isFollowing : state.profile.isFollowing,
-                followersCount: followersCount !== undefined ? followersCount : state.profile.followersCount,
-                followingCount: followingCount !== undefined ? followingCount : state.profile.followingCount,
-              }
-            : state.profile,
-        }))
+        set((state) => {
+          const next = { ...state };
+          if (state.profile && state.profile._id === targetUserId) {
+            next.profile = {
+              ...state.profile,
+              isFollowing: state.profile._id === currentUserId ? isFollowing : state.profile.isFollowing,
+              followersCount: followersCount !== undefined ? followersCount : state.profile.followersCount,
+              followingCount: followingCount !== undefined ? followingCount : state.profile.followingCount,
+            };
+          }
+          return next;
+        });
       })
     )
   },
@@ -84,6 +92,66 @@ export const useProfileStore = create((set, get) => ({
     }
   },
 
+  // Paginated followers/following
+  fetchFollowers: async (userId, { page = 1, append = false } = {}) => {
+    if (!userId) return
+    set((state) => ({
+      followersList: { ...state.followersList, loading: true },
+    }))
+    try {
+      const res = await API.get(`/api/users/${userId}/followers?page=${page}&limit=20`)
+      const data = res.data || {}
+      set((state) => ({
+        followersList: {
+          list: append
+            ? [...state.followersList.list, ...(data.users || [])]
+            : (data.users || []),
+          total: data.total ?? state.followersList.total,
+          page: data.page ?? page,
+          hasMore: !!data.hasMore,
+          loading: false,
+        },
+      }))
+    } catch (err) {
+      console.error('fetchFollowers error:', err)
+      set((state) => ({
+        followersList: { ...state.followersList, loading: false },
+      }))
+    }
+  },
+
+  fetchFollowing: async (userId, { page = 1, append = false } = {}) => {
+    if (!userId) return
+    set((state) => ({
+      followingList: { ...state.followingList, loading: true },
+    }))
+    try {
+      const res = await API.get(`/api/users/${userId}/following?page=${page}&limit=20`)
+      const data = res.data || {}
+      set((state) => ({
+        followingList: {
+          list: append
+            ? [...state.followingList.list, ...(data.users || [])]
+            : (data.users || []),
+          total: data.total ?? state.followingList.total,
+          page: data.page ?? page,
+          hasMore: !!data.hasMore,
+          loading: false,
+        },
+      }))
+    } catch (err) {
+      console.error('fetchFollowing error:', err)
+      set((state) => ({
+        followingList: { ...state.followingList, loading: false },
+      }))
+    }
+  },
+
+  resetFollowList: (kind) => {
+    if (kind === 'followers') set({ followersList: emptyFollowList() })
+    else if (kind === 'following') set({ followingList: emptyFollowList() })
+  },
+
   handleFollow: async (targetUserId) => {
     if (!targetUserId) return
     set((state) => ({
@@ -109,23 +177,35 @@ export const useProfileStore = create((set, get) => ({
           ...state.profile,
           isFollowing: !isCurrentlyFollowing,
           followersCount: isCurrentlyFollowing
-            ? state.profile.followersCount - 1
-            : state.profile.followersCount + 1,
+            ? Math.max(0, (state.profile.followersCount || 0) - 1)
+            : (state.profile.followersCount || 0) + 1,
         },
       }
     })
     try {
       const res = await API.post(`/api/users/${targetUserId}/follow`)
       const { isFollowing, followersCount } = res.data
-      set((state) => ({
-        profile: state.profile
-          ? { ...state.profile, isFollowing, followersCount }
-          : null,
-      }))
+      set((state) => {
+        const next = { ...state }
+        if (state.profile) {
+          next.profile = { ...state.profile, isFollowing, followersCount }
+        }
+        // Update the in-memory followers list so the modal reflects the change
+        if (state.profile && state.profile._id === targetUserId && isFollowing) {
+          // The current user just followed this profile -> make sure they appear
+          // in this profile's followers list with isFollowing=true.
+          const me = state.profile && (state.profile._id === targetUserId)
+            ? null // self-follow edge case (we block this in backend)
+            : null;
+          // We can't fully reconstruct the user here; the page will refetch
+          // on next open, which is fine.
+        }
+        return next;
+      })
     } catch {
       set({ profile: prevProfile })
     }
   },
 
-  clearProfile: () => set({ profile: null, posts: [] }),
+  clearProfile: () => set({ profile: null, posts: [], followersList: emptyFollowList(), followingList: emptyFollowList() }),
 }))

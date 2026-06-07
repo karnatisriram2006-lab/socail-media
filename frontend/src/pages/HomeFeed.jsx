@@ -158,7 +158,7 @@ export default function HomeFeed() {
   )
 
   return (
-    <div className="w-full max-w-[650px] mx-auto px-2 py-3 space-y-3">
+    <div className="w-full max-w-[650px] mx-auto px-3 py-3 space-y-3">
       <CreatePostCard onOpen={() => setShowCreateModal(true)} />
       <FeedControls sort={sort} onChange={setSort} />
 

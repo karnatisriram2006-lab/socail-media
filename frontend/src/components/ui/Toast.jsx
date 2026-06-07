@@ -64,7 +64,11 @@ export function ToastProvider({ children }) {
       {children}
       <div
         className="fixed z-[100] flex flex-col items-end gap-2 pointer-events-none"
-        style={{ right: 16, bottom: 16, maxWidth: 380 }}
+        style={{
+          right: 16,
+          bottom: "calc(16px + env(safe-area-inset-bottom))",
+          maxWidth: 380,
+        }}
       >
         {toasts.map((t) => {
           const style = VARIANT_STYLES[t.variant] || VARIANT_STYLES.info;

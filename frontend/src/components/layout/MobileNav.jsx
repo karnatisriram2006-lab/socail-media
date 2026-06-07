@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Home, Search, PlusSquare, Heart, Sparkles } from 'lucide-react'
+import { Home, Search, PlusSquare, Heart, Sparkles, Bell, MessageCircle } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useNotificationStore } from '../../store/notificationStore'
 
@@ -12,7 +12,8 @@ export default function MobileNav({ onCreatePostClick }) {
   const navItems = [
     { to: '/app', icon: Home },
     { to: '/search', icon: Search },
-    { to: '/explore', icon: Heart, badge: unreadCount },
+    { to: '/messages', icon: MessageCircle }, // Messages navigation
+    { to: '/explore', icon: Sparkles },
   ]
 
   return (
@@ -27,8 +28,9 @@ export default function MobileNav({ onCreatePostClick }) {
             </span>
           </Link>
           <div className="flex items-center gap-2">
+            {/* Use Bell for notifications to avoid confusion with Explore's Sparkles */}
             <Link to="/notifications" className="relative p-2">
-              <Heart className="w-5 h-5 text-gray-700" />
+              <Bell className="w-5 h-5 text-gray-700" />
               {unreadCount > 0 && (
                 <span className="absolute top-1 right-1 bg-red-500 text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
                   {unreadCount > 9 ? '9+' : unreadCount}
@@ -103,8 +105,7 @@ export default function MobileNav({ onCreatePostClick }) {
               isActive
                 ? 'text-gray-900'
                 : 'text-gray-400 hover:text-gray-600'
-            }`
-          }
+            }`}
         >
           {({ isActive }) => (
             <>

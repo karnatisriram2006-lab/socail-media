@@ -1,52 +1,149 @@
 const User = require('../models/User');
+const Post = require('../models/Post');
 const Notification = require('../models/Notification');
 
-exports.getUserProfile = async (req, res) => {
+// Helper: pick a user by id or username, return null if not found.
+const findUser = async (idOrUsername) => {
+  if (!idOrUsername) return null;
+  const isObjectId = /^[0-9a-fA-F]{24}$/.test(idOrUsername);
+  if (isObjectId) return await User.findById(idOrUsername);
+  return await User.findOne({ username: idOrUsername.toLowerCase() });
+};
+
+// Enrich a user object with the fields the frontend needs and strip
+// the heavy `followers` / `following` arrays (callers should use the
+// dedicated paginated endpoints instead).
+const buildProfileResponse = (user, currentUserId) => {
+  const obj = user.toObject ? user.toObject() : { ...user };
+  obj.followersCount = (obj.followers || []).length;
+  obj.followingCount = (obj.following || []).length;
+  // The frontend never needs the full arrays in the profile payload.
+  obj.followers = [];
+  obj.following = [];
+  if (currentUserId) {
+    obj.isFollowing = (user.followers || []).some(
+      (fid) => fid.toString() === currentUserId.toString(),
+    );
+  } else {
+    obj.isFollowing = false;
+  }
+  return obj;
+};
+
+// GET /api/users/:idOrUsername
+exports.getUserById = async (req, res) => {
   try {
-    const { username } = req.params;
-    const user = await User.findOne({ username: username.toLowerCase() })
-      .populate('followers', 'username name profileImage isVerified')
-      .populate('following', 'username name profileImage isVerified');
+    const { id } = req.params;
+    const user = await findUser(id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
 
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    return res.status(200).json(user);
+    // Compute post count separately so we don't depend on a virtual.
+    const postsCount = await Post.countDocuments({ userId: user._id });
+    const obj = buildProfileResponse(user, req.user?.id);
+    obj.postsCount = postsCount;
+    return res.status(200).json(obj);
   } catch (error) {
     return res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
-exports.getUserById = async (req, res) => {
+// GET /api/users/profile/:username  (kept for backwards compat — delegates)
+exports.getUserProfile = async (req, res) => {
   try {
-    const { id } = req.params;
-    const isObjectId = id.match(/^[0-9a-fA-F]{24}$/);
-    const user = isObjectId
-      ? await User.findById(id)
-          .populate('followers', 'username name profileImage isVerified')
-          .populate('following', 'username name profileImage isVerified')
-      : await User.findOne({ username: id.toLowerCase() })
-          .populate('followers', 'username name profileImage isVerified')
-          .populate('following', 'username name profileImage isVerified');
+    const { username } = req.params;
+    const user = await User.findOne({ username: username.toLowerCase() });
+    if (!user) return res.status(404).json({ message: 'User not found' });
 
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+    const postsCount = await Post.countDocuments({ userId: user._id });
+    const obj = buildProfileResponse(user, req.user?.id);
+    obj.postsCount = postsCount;
+    return res.status(200).json(obj);
+  } catch (error) {
+    return res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Helper for paginated follower/following lists. Returns enriched user
+// objects with an `isFollowing` flag indicating whether the requester
+// follows each person.
+const buildFollowListResponse = async (user, kind, page, limit, requesterId) => {
+  const ids = kind === 'followers' ? user.followers : user.following;
+  const total = ids.length;
+  const skip = (page - 1) * limit;
+  const pageIds = ids.slice(skip, skip + limit);
+
+  const users = await User.find({ _id: { $in: pageIds } })
+    .select('username name profileImage isVerified');
+
+  // Preserve the original order of the array.
+  const userMap = new Map(users.map((u) => [u._id.toString(), u]));
+  const ordered = pageIds
+    .map((id) => userMap.get(id.toString()))
+    .filter(Boolean);
+
+  // Compute who the requester follows so each entry can carry the flag.
+  let requesterFollowingIds = new Set();
+  if (requesterId) {
+    const me = await User.findById(requesterId).select('following');
+    if (me) {
+      requesterFollowingIds = new Set(me.following.map((id) => id.toString()));
     }
+  }
 
-    const currentUserId = req.user?.id;
-    if (currentUserId) {
-      const currentUser = await User.findById(currentUserId);
-      if (currentUser) {
-        const userObj = user.toObject();
-        userObj.isFollowing = currentUser.following.some(
-          (fid) => fid.toString() === user._id.toString()
-        );
-        return res.status(200).json(userObj);
-      }
-    }
+  const enriched = ordered.map((u) => {
+    const o = u.toObject();
+    o.isFollowing = requesterFollowingIds.has(u._id.toString());
+    return o;
+  });
 
-    return res.status(200).json(user);
+  return {
+    users: enriched,
+    total,
+    page,
+    limit,
+    hasMore: skip + pageIds.length < total,
+  };
+};
+
+// GET /api/users/:id/followers?page=1&limit=20
+exports.getFollowers = async (req, res) => {
+  try {
+    const user = await findUser(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+
+    const data = await buildFollowListResponse(
+      user,
+      'followers',
+      page,
+      limit,
+      req.user?.id,
+    );
+    return res.status(200).json(data);
+  } catch (error) {
+    return res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// GET /api/users/:id/following?page=1&limit=20
+exports.getFollowing = async (req, res) => {
+  try {
+    const user = await findUser(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+
+    const data = await buildFollowListResponse(
+      user,
+      'following',
+      page,
+      limit,
+      req.user?.id,
+    );
+    return res.status(200).json(data);
   } catch (error) {
     return res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -78,13 +175,11 @@ exports.updateUserProfile = async (req, res) => {
 
     await user.save();
 
-    const updatedUser = await User.findById(user._id)
-      .populate('followers', 'username name profileImage isVerified')
-      .populate('following', 'username name profileImage isVerified');
+    const updatedUser = await User.findById(user._id);
 
     return res.status(200).json({
       message: 'Profile updated successfully',
-      user: updatedUser,
+      user: buildProfileResponse(updatedUser, req.user.id),
     });
   } catch (error) {
     return res.status(500).json({ message: 'Server error during profile update', error: error.message });
@@ -107,11 +202,18 @@ exports.followUnfollowUser = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    const isFollowing = currentUser.following.includes(targetUserId);
+    const isFollowing = currentUser.following.some(
+      (id) => id.toString() === targetUserId.toString(),
+    );
 
     if (isFollowing) {
-      currentUser.following = currentUser.following.filter((id) => id.toString() !== targetUserId);
-      targetUser.followers = targetUser.followers.filter((id) => id.toString() !== currentUserId.toString());
+      // Unfollow
+      currentUser.following = currentUser.following.filter(
+        (id) => id.toString() !== targetUserId.toString(),
+      );
+      targetUser.followers = targetUser.followers.filter(
+        (id) => id.toString() !== currentUserId.toString(),
+      );
       await currentUser.save();
       await targetUser.save();
 
@@ -138,6 +240,7 @@ exports.followUnfollowUser = async (req, res) => {
         followingCount: currentUser.following.length,
       });
     } else {
+      // Follow
       currentUser.following.push(targetUserId);
       targetUser.followers.push(currentUserId);
       await currentUser.save();
@@ -200,7 +303,7 @@ exports.searchUsers = async (req, res) => {
         { name: { $regex: q, $options: 'i' } },
       ],
     })
-      .select('username name profileImage isVerified followers')
+      .select('username name profileImage isVerified')
       .limit(20);
 
     return res.status(200).json(users);
@@ -217,7 +320,7 @@ exports.getSuggestedUsers = async (req, res) => {
     const excludeUsers = [currentUserId, ...currentUser.following];
 
     const users = await User.find({ _id: { $nin: excludeUsers } })
-      .select('username name profileImage isVerified followers')
+      .select('username name profileImage isVerified')
       .limit(5)
       .sort({ 'followers.length': -1 });
 

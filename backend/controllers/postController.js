@@ -7,32 +7,47 @@ const { cloudinary } = require('../config/cloudinary');
 // Helper function to enrich posts with user-specific data
 const enrichPosts = async (posts, currentUserId) => {
   if (!posts || !posts.length) return posts;
-  
+
   const userIdStr = currentUserId.toString();
-  
-  // Get user's saved posts for isSaved computation
-  const currentUser = await User.findById(currentUserId).select('savedPosts');
+
+  // Get user's saved posts + who they follow so we can attach
+  // isSaved + isFollowing (on the post's author) to each post.
+  const currentUser = await User.findById(currentUserId).select('savedPosts following');
   const savedPostIds = new Set(
-    currentUser?.savedPosts?.map(id => id.toString()) || []
+    (currentUser?.savedPosts || []).map((id) => id.toString()),
   );
-  
-  return posts.map(post => {
+  const followingIds = new Set(
+    (currentUser?.following || []).map((id) => id.toString()),
+  );
+
+  return posts.map((post) => {
     const postObj = post.toObject ? post.toObject() : post;
-    
+
     // Compute isLiked - handle both populated subdocuments and raw ObjectIds
-    const isLiked = post.likes?.some(like => {
+    const isLiked = (post.likes || []).some((like) => {
       const likeId = like && like._id ? like._id.toString() : like.toString();
       return likeId === userIdStr;
-    }) || false;
-    
+    });
+
     // Compute isSaved
     const isSaved = savedPostIds.has(post._id.toString());
-    
+
+    // Build the `user` object that the frontend uses. We always expose
+    // a normalized user with `isFollowing` so the PostCard follow button
+    // can show the right state.
+    const populatedUser = postObj.userId && typeof postObj.userId === 'object'
+      ? { ...postObj.userId }
+      : null;
+    const authorId = (populatedUser?._id || postObj.userId || '').toString();
+    const userForClient = populatedUser
+      ? { ...populatedUser, isFollowing: followingIds.has(authorId) }
+      : { isFollowing: followingIds.has(authorId) };
+
     // Ensure likes are populated with user objects
     const likes = post.likes && post.likes.length > 0 && typeof post.likes[0] === 'object' && post.likes[0]._id
       ? post.likes
       : post.likes; // Will be populated by caller
-    
+
     return {
       ...postObj,
       // Always expose unified media fields. For legacy posts, fall back to the
@@ -41,10 +56,10 @@ const enrichPosts = async (posts, currentUserId) => {
       mediaType: postObj.mediaType || 'image',
       thumbnail: postObj.thumbnail || (postObj.mediaType === 'image' ? (postObj.mediaUrl || postObj.image) : ''),
       videoDuration: postObj.videoDuration || null,
-      user: postObj.userId || postObj.user, // Normalize to 'user' for frontend
-      userId: postObj.userId?._id || postObj.userId,
+      user: userForClient, // Normalize to 'user' for frontend
+      userId: authorId,
       likes,
-      likesCount: post.likes?.length || 0,
+      likesCount: (post.likes || []).length,
       isLiked,
       isSaved,
       commentsCount: postObj.commentsCount || 0,
@@ -55,33 +70,45 @@ const enrichPosts = async (posts, currentUserId) => {
 // Helper to enrich a single post
 const enrichPost = async (post, currentUserId) => {
   if (!post) return post;
-  
+
   const userIdStr = currentUserId.toString();
-  
-  const currentUser = await User.findById(currentUserId).select('savedPosts');
+
+  const currentUser = await User.findById(currentUserId).select('savedPosts following');
   const savedPostIds = new Set(
-    currentUser?.savedPosts?.map(id => id.toString()) || []
+    (currentUser?.savedPosts || []).map((id) => id.toString()),
   );
-  
+  const followingIds = new Set(
+    (currentUser?.following || []).map((id) => id.toString()),
+  );
+
   const postObj = post.toObject ? post.toObject() : post;
-  
+
   // Compute isLiked - handle both populated subdocuments and raw ObjectIds
-  const isLiked = post.likes?.some(like => {
+  const isLiked = (post.likes || []).some((like) => {
     const likeId = like && like._id ? like._id.toString() : like.toString();
     return likeId === userIdStr;
-  }) || false;
+  });
   const isSaved = savedPostIds.has(post._id.toString());
-  
+
+  // Build the `user` object with isFollowing
+  const populatedUser = postObj.userId && typeof postObj.userId === 'object'
+    ? { ...postObj.userId }
+    : null;
+  const authorId = (populatedUser?._id || postObj.userId || '').toString();
+  const userForClient = populatedUser
+    ? { ...populatedUser, isFollowing: followingIds.has(authorId) }
+    : { isFollowing: followingIds.has(authorId) };
+
   return {
     ...postObj,
     mediaUrl: postObj.mediaUrl || postObj.image || '',
     mediaType: postObj.mediaType || 'image',
     thumbnail: postObj.thumbnail || (postObj.mediaType === 'image' ? (postObj.mediaUrl || postObj.image) : ''),
     videoDuration: postObj.videoDuration || null,
-    user: postObj.userId || postObj.user,
-    userId: postObj.userId?._id || postObj.userId,
+    user: userForClient,
+    userId: authorId,
     likes: post.likes,
-    likesCount: post.likes?.length || 0,
+    likesCount: (post.likes || []).length,
     isLiked,
     isSaved,
     commentsCount: postObj.commentsCount || 0,
@@ -107,13 +134,8 @@ exports.createPost = async (req, res) => {
     if (mediaKind === 'video') {
       mediaType = 'video';
 
-      // Cloudinary returns a `public_id` and the secure URL on `req.file`.
-      // When `eager` is configured in multer-storage-cloudinary, the response
-      // object (sometimes attached as `req.file.eager` or fetched via
-      // `cloudinary.api.resource`) contains the eager-derived thumbnail.
       const publicId = req.file.filename || req.file.public_id;
 
-      // Try to fetch the eager thumbnail + duration from Cloudinary
       if (publicId) {
         try {
           const details = await cloudinary.api.resource(publicId, {
@@ -121,7 +143,6 @@ exports.createPost = async (req, res) => {
             image_metadata: true,
             colors: false,
           });
-          // Eager transformations (e.g. JPG thumbnail) live under `eager`
           if (Array.isArray(details.eager) && details.eager.length > 0) {
             thumbnail = details.eager[0].secure_url || details.eager[0].url || '';
           }
@@ -133,10 +154,7 @@ exports.createPost = async (req, res) => {
         }
       }
 
-      // Fallback: use Cloudinary's `so_2` (start-offset) URL transformation
-      // to get a poster frame from the video itself.
       if (!thumbnail && publicId) {
-        // `f_jpg` converts a frame to JPG; `so_2` starts at 2 seconds in
         thumbnail = cloudinary.url(publicId, {
           resource_type: 'video',
           format: 'jpg',
@@ -147,7 +165,6 @@ exports.createPost = async (req, res) => {
         });
       }
 
-      // If the client provided a duration (via metadata probe), use it
       if (req.body.videoDuration) {
         const parsed = parseFloat(req.body.videoDuration);
         if (!Number.isNaN(parsed)) {
@@ -155,9 +172,7 @@ exports.createPost = async (req, res) => {
         }
       }
 
-      // Enforce 60-second cap
       if (videoDuration && videoDuration > 60) {
-        // Best-effort cleanup: delete the uploaded asset
         try {
           if (publicId) {
             await cloudinary.uploader.destroy(publicId, { resource_type: 'video', invalidate: true });
@@ -168,13 +183,12 @@ exports.createPost = async (req, res) => {
         });
       }
     } else {
-      // For image posts, use the same URL for both `mediaUrl` and `thumbnail`
       thumbnail = mediaUrl;
     }
 
     const post = await Post.create({
       userId: req.user.id,
-      image: mediaUrl, // legacy field, also serves as thumbnail for image posts
+      image: mediaUrl,
       mediaUrl,
       mediaType,
       thumbnail,
@@ -189,7 +203,6 @@ exports.createPost = async (req, res) => {
       'username name profileImage isVerified'
     );
 
-    // Enrich with user-specific data
     const enrichedPost = await enrichPost(populatedPost, req.user.id);
 
     if (global.io) {
@@ -243,7 +256,6 @@ exports.getPostById = async (req, res) => {
       return res.status(404).json({ message: 'Post not found' });
     }
 
-    // Enrich with user-specific data
     const enrichedPost = await enrichPost(post, req.user.id);
 
     return res.status(200).json(enrichedPost);
@@ -262,11 +274,9 @@ exports.likeUnlikePost = async (req, res) => {
       return res.status(404).json({ message: 'Post not found' });
     }
 
-    // Check if user already liked this post
     const isLiked = post.likes.some((id) => id.toString() === userId.toString());
 
     if (isLiked) {
-      // Unlike: Remove user from likes array using pull for atomicity
       post.likes.pull(userId);
       await post.save();
 
@@ -277,7 +287,6 @@ exports.likeUnlikePost = async (req, res) => {
         type: 'like',
       });
 
-      // Reload post with populated likes
       const updatedPost = await Post.findById(post._id)
         .populate('userId', 'username name profileImage isVerified')
         .populate('likes', 'username name profileImage isVerified');
@@ -285,22 +294,21 @@ exports.likeUnlikePost = async (req, res) => {
       const enrichedPost = await enrichPost(updatedPost, userId);
 
       if (global.io) {
-        global.io.emit('likeUpdate', { 
-          postId: post._id, 
+        global.io.emit('likeUpdate', {
+          postId: post._id,
           likes: enrichedPost.likes,
           likesCount: enrichedPost.likesCount,
           isLiked: false,
         });
       }
 
-      return res.status(200).json({ 
-        message: 'Post unliked', 
+      return res.status(200).json({
+        message: 'Post unliked',
         likes: enrichedPost.likes,
         likesCount: enrichedPost.likesCount,
         isLiked: false,
       });
     } else {
-      // Use addToSet to prevent duplicate likes (atomic operation)
       if (!post.likes.includes(userId)) {
         post.likes.addToSet(userId);
         await post.save();
@@ -327,7 +335,6 @@ exports.likeUnlikePost = async (req, res) => {
         }
       }
 
-      // Reload post with populated likes
       const updatedPost = await Post.findById(post._id)
         .populate('userId', 'username name profileImage isVerified')
         .populate('likes', 'username name profileImage isVerified');
@@ -335,16 +342,16 @@ exports.likeUnlikePost = async (req, res) => {
       const enrichedPost = await enrichPost(updatedPost, userId);
 
       if (global.io) {
-        global.io.emit('likeUpdate', { 
-          postId: post._id, 
+        global.io.emit('likeUpdate', {
+          postId: post._id,
           likes: enrichedPost.likes,
           likesCount: enrichedPost.likesCount,
           isLiked: true,
         });
       }
 
-      return res.status(200).json({ 
-        message: 'Post liked', 
+      return res.status(200).json({
+        message: 'Post liked',
         likes: enrichedPost.likes,
         likesCount: enrichedPost.likesCount,
         isLiked: true,
@@ -500,7 +507,6 @@ exports.getHomeFeed = async (req, res) => {
         .limit(limit);
     }
 
-    // Enrich posts with user-specific data
     const enrichedPosts = await enrichPosts(posts, req.user.id);
 
     return res.status(200).json(enrichedPosts);
@@ -523,7 +529,6 @@ exports.getExploreFeed = async (req, res) => {
       .skip(skip)
       .limit(limit);
 
-    // Enrich posts with user-specific data
     const enrichedPosts = await enrichPosts(posts, req.user.id);
 
     return res.status(200).json(enrichedPosts);
@@ -549,7 +554,6 @@ exports.getUserPosts = async (req, res) => {
       .populate('likes', 'username name profileImage isVerified')
       .sort({ createdAt: -1 });
 
-    // Enrich posts with user-specific data
     const enrichedPosts = await enrichPosts(posts, req.user.id);
 
     return res.status(200).json(enrichedPosts);
