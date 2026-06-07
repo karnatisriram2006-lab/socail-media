@@ -3,17 +3,30 @@ import { initSocket, onSocketEvent, removeAllSocketListeners } from '../services
 import API from '../services/api'
 
 // Backend now returns enriched posts with user-specific data (isLiked, isSaved, likesCount, etc.)
-// This normalizer ensures backward compatibility and handles any edge cases
+// This normalizer ensures backward compatibility and handles any edge cases.
 const normalizePost = (post) => {
   if (!post) return post
   
   const user = post.user || post.userId || null
   const likesArr = Array.isArray(post.likes) ? post.likes : []
   
+  // Resolve media fields with sensible fallbacks for legacy + new posts.
+  const mediaType = post.mediaType || 'image'
+  const mediaUrl = post.mediaUrl || post.image || post.imageUrl || ''
+  const thumbnail = post.thumbnail || (mediaType === 'image' ? (mediaUrl || post.image) : '')
+  
   return {
     ...post,
     user,
     userId: user?._id || post.userId,
+    // Unified media fields
+    mediaType,
+    mediaUrl,
+    thumbnail,
+    videoDuration: post.videoDuration ?? null,
+    // Legacy `image` alias - if the post is a video, the thumbnail is the
+    // fallback "image" so older code paths that read `post.image` still work.
+    image: post.image || post.imageUrl || (mediaType === 'video' ? thumbnail : mediaUrl),
     // Backend now provides these directly, but fallback for safety
     likesCount: post.likesCount ?? likesArr.length,
     commentsCount: post.commentsCount ?? 0,
@@ -21,7 +34,6 @@ const normalizePost = (post) => {
     isLiked: post.isLiked ?? false,
     isSaved: post.isSaved ?? false,
     sharesCount: post.sharesCount ?? 0,
-    image: post.image || post.imageUrl,
     timeAgo: post.timeAgo,
   }
 }
@@ -185,12 +197,20 @@ export const usePostStore = create((set, get) => ({
     }
   },
 
-  createPost: async (caption, imageFile) => {
+  createPost: async (caption, mediaFile, extra = {}) => {
     set({ loading: true, error: null })
     try {
       const formData = new FormData()
       formData.append('caption', caption)
-      formData.append('image', imageFile)
+      // Field name stays `image` for backward compat with the backend route,
+      // but the file itself can be a video.
+      formData.append('image', mediaFile)
+      if (extra.videoDuration) {
+        formData.append('videoDuration', String(extra.videoDuration))
+      }
+      if (extra.mediaKind) {
+        formData.append('mediaKind', extra.mediaKind)
+      }
       const res = await API.post('/api/posts', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })

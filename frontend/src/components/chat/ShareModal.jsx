@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, X, Send, Check, ChevronLeft } from "lucide-react";
+import { Search, X, Send, Check, ChevronLeft, Play } from "lucide-react";
 import { useAuthStore } from "../../store/authStore";
 import { useChatStore } from "../../store/chatStore";
 import API from "../../services/api";
@@ -25,6 +25,12 @@ export default function ShareModal({ post, onClose }) {
   const [contacts, setContacts] = useState([]);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+
+  // Resolve the right thumbnail for the preview (image or video)
+  const isVideo = post?.mediaType === "video";
+  const previewSrc = isVideo
+    ? (post?.thumbnail || post?.image || post?.imageUrl || post?.mediaUrl)
+    : (post?.image || post?.imageUrl || post?.mediaUrl);
 
   // Load conversations + followers
   useEffect(() => {
@@ -236,18 +242,30 @@ export default function ShareModal({ post, onClose }) {
             {/* Preview */}
             <div className="flex items-center gap-3 mb-3 px-1">
               <div className="shrink-0">
-                <div className="w-11 h-11 rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
+                <div className="relative w-11 h-11 rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
                   <img
-                    src={post?.image || post?.imageUrl || ""}
+                    src={previewSrc || ""}
                     alt=""
                     className="w-full h-full object-cover"
                     onError={(e) => (e.currentTarget.style.display = "none")}
                   />
+                  {isVideo && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="w-5 h-5 rounded-full bg-black/55 flex items-center justify-center">
+                        <Play className="w-2.5 h-2.5 text-white fill-white ml-px" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-gray-900 truncate">
                   {post?.user?.username || "Post"}
+                  {isVideo && (
+                    <span className="ml-1.5 text-[10px] font-medium text-gray-500">
+                      · Video
+                    </span>
+                  )}
                 </p>
                 <p className="text-[11px] text-gray-500 truncate">
                   {post?.caption ? `${post.caption.slice(0, 40)}...` : "No caption"}

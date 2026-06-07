@@ -27,11 +27,18 @@ function notifIcon(type) {
   return Bell
 }
 
+function notifSender(n) {
+  return n.senderId || n.sender || {}
+}
+
 function notifText(n) {
-  const who = n.sender?.username || 'Someone'
+  const sender = notifSender(n)
+  const who = sender?.username || 'Someone'
   if (n.type === 'like') return `${who} liked your post.`
   if (n.type === 'comment') return `${who} commented on your post.`
   if (n.type === 'follow') return `${who} started following you.`
+  if (n.type === 'post_share' || n.type === 'share') return `${who} shared your post.`
+  if (n.type === 'profile_share') return `${who} shared a profile with you.`
   return `${who} interacted with your post.`
 }
 
@@ -106,7 +113,7 @@ export default function NotificationsPage() {
                 }`}
               >
                 <div className="relative shrink-0">
-                  <Avatar name={n.sender?.username} src={n.sender?.profileImage} size={44} />
+                  <Avatar name={notifSender(n)?.username} src={notifSender(n)?.profileImage} size={44} />
                   <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white flex items-center justify-center shadow">
                     <Icon className={`w-3 h-3 ${
                       n.type === 'like' ? 'text-red-500' : n.type === 'comment' ? 'text-blue-500' : n.type === 'follow' ? 'text-purple-500' : 'text-gray-500'

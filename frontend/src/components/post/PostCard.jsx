@@ -13,6 +13,7 @@ import { useAuthStore } from "../../store/authStore";
 import { useProfileStore } from "../../store/profileStore";
 import { useToast } from "../ui/Toast";
 import ShareModal from "../chat/ShareModal";
+import MediaPlayer from "./MediaPlayer";
 
 function timeAgo(dateStr) {
   if (!dateStr) return "";
@@ -67,7 +68,7 @@ function Avatar({ name, src, size = 40 }) {
   );
 }
 
-export default function PostCard({ post }) {
+export default function PostCard({ post, isExplore = false }) {
   const {
     likePost,
     savePost,
@@ -231,7 +232,6 @@ export default function PostCard({ post }) {
   const username = post.user?.username || "Unknown";
   const userIdStr = post.user?._id || post.userId;
   const userImage = post.user?.profileImage;
-  const postImage = post.image || post.imageUrl;
   const timeStr = post.timeAgo || timeAgo(post.createdAt);
   const captionText = post.caption || "";
   const tags =
@@ -240,6 +240,12 @@ export default function PostCard({ post }) {
       : extractHashtags(captionText);
   const cleanCaption =
     tags.length > 0 ? captionText.replace(/#[\w]+/g, "").trim() : captionText;
+  const hasMedia = !!(
+    post.mediaUrl ||
+    post.image ||
+    post.imageUrl ||
+    post.thumbnail
+  );
 
   return (
     <motion.div
@@ -293,36 +299,14 @@ export default function PostCard({ post }) {
         </div>
       </div>
 
-      {/* Image */}
-      {postImage && (
-        <div className="relative bg-gray-50">
-          <motion.img
-            src={postImage}
-            alt="Post"
-            className="w-full max-h-[520px] object-cover"
-            loading="lazy"
-            onDoubleClick={handleLike}
-            onError={(e) => (e.currentTarget.style.display = "none")}
-          />
-          {/* "+1" floating likes (Instagram-style) */}
-          <div className="absolute inset-0 pointer-events-none overflow-hidden">
-            <AnimatePresence>
-              {floatingLikes.map((f) => (
-                <motion.div
-                  key={f.id}
-                  initial={{ y: 0, opacity: 0, scale: 0.5 }}
-                  animate={{ y: -120, opacity: 1, scale: 1.4 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 1.1, ease: "easeOut" }}
-                  className="absolute left-1/2 -translate-x-1/2"
-                  style={{ bottom: "40%" }}
-                >
-                  <Heart className="w-8 h-8 text-red-500 fill-red-500 drop-shadow-lg" />
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        </div>
+      {/* Unified Media (image or video) */}
+      {hasMedia && (
+        <MediaPlayer
+          post={post}
+          onDoubleClick={handleLike}
+          floatingLikes={floatingLikes}
+          autoplayWhenVisible={!isExplore}
+        />
       )}
 
       {/* Action row */}

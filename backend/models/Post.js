@@ -8,9 +8,39 @@ const postSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    // Legacy field - kept as virtual for backward compat with old posts.
+    // For new posts, use mediaUrl + mediaType.
     image: {
       type: String,
-      required: true,
+      required: false,
+    },
+    // New unified media fields
+    mediaUrl: {
+      type: String,
+      default: '',
+    },
+    mediaType: {
+      type: String,
+      enum: ['image', 'video'],
+      default: 'image',
+    },
+    // Thumbnail / poster image (used for videos)
+    thumbnail: {
+      type: String,
+      default: '',
+    },
+    // Optional video metadata
+    videoDuration: {
+      type: Number, // seconds
+      default: null,
+    },
+    videoWidth: {
+      type: Number,
+      default: null,
+    },
+    videoHeight: {
+      type: Number,
+      default: null,
     },
     caption: {
       type: String,
@@ -56,6 +86,28 @@ postSchema.pre('save', function (next) {
   next();
 });
 
+// Backward-compat virtual: returns the URL to display as the post's "image".
+// For image posts -> mediaUrl, for video posts -> thumbnail (poster frame).
+postSchema.virtual('displayImage').get(function () {
+  if (this.mediaType === 'video') {
+    return this.thumbnail || this.mediaUrl || this.image;
+  }
+  return this.mediaUrl || this.image;
+});
+
+// Backward-compat alias: many existing frontends read `post.image`.
+// We make this a real document property via pre-validation hook so it serializes.
+postSchema.pre('validate', function (next) {
+  if (!this.image) {
+    if (this.mediaType === 'video') {
+      this.image = this.thumbnail || this.mediaUrl || '';
+    } else {
+      this.image = this.mediaUrl || '';
+    }
+  }
+  next();
+});
+
 // Virtual for likes count
 postSchema.virtual('likesCount').get(function () {
   return this.likes ? this.likes.length : 0;
@@ -63,7 +115,6 @@ postSchema.virtual('likesCount').get(function () {
 
 // Virtual for checking if a user has liked this post
 postSchema.virtual('isLiked').get(function () {
-  // This will be set dynamically in controllers based on request user
   return this._isLiked || false;
 });
 
@@ -75,13 +126,15 @@ postSchema.virtual('isSaved').get(function () {
 // Method to compute isLiked for a specific user
 postSchema.methods.computeIsLiked = function (userId) {
   if (!userId) return false;
-  return this.likes.some((like) => like.toString() === userId.toString());
+  return this.likes.some((like) => {
+    const likeId = like && like._id ? like._id.toString() : like.toString();
+    return likeId === userId.toString();
+  });
 };
 
 // Method to compute isSaved for a specific user
 postSchema.methods.computeIsSaved = function (userId) {
   if (!userId) return false;
-  // This requires the user document to have savedPosts populated
   return false; // Will be set in controller
 };
 

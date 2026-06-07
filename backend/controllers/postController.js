@@ -2,6 +2,7 @@ const Post = require('../models/Post');
 const User = require('../models/User');
 const Comment = require('../models/Comment');
 const Notification = require('../models/Notification');
+const { cloudinary } = require('../config/cloudinary');
 
 // Helper function to enrich posts with user-specific data
 const enrichPosts = async (posts, currentUserId) => {
@@ -18,8 +19,11 @@ const enrichPosts = async (posts, currentUserId) => {
   return posts.map(post => {
     const postObj = post.toObject ? post.toObject() : post;
     
-    // Compute isLiked
-    const isLiked = post.likes?.some(like => like.toString() === userIdStr) || false;
+    // Compute isLiked - handle both populated subdocuments and raw ObjectIds
+    const isLiked = post.likes?.some(like => {
+      const likeId = like && like._id ? like._id.toString() : like.toString();
+      return likeId === userIdStr;
+    }) || false;
     
     // Compute isSaved
     const isSaved = savedPostIds.has(post._id.toString());
@@ -31,6 +35,12 @@ const enrichPosts = async (posts, currentUserId) => {
     
     return {
       ...postObj,
+      // Always expose unified media fields. For legacy posts, fall back to the
+      // existing `image` field so the frontend receives a complete picture.
+      mediaUrl: postObj.mediaUrl || postObj.image || '',
+      mediaType: postObj.mediaType || 'image',
+      thumbnail: postObj.thumbnail || (postObj.mediaType === 'image' ? (postObj.mediaUrl || postObj.image) : ''),
+      videoDuration: postObj.videoDuration || null,
       user: postObj.userId || postObj.user, // Normalize to 'user' for frontend
       userId: postObj.userId?._id || postObj.userId,
       likes,
@@ -55,11 +65,19 @@ const enrichPost = async (post, currentUserId) => {
   
   const postObj = post.toObject ? post.toObject() : post;
   
-  const isLiked = post.likes?.some(like => like.toString() === userIdStr) || false;
+  // Compute isLiked - handle both populated subdocuments and raw ObjectIds
+  const isLiked = post.likes?.some(like => {
+    const likeId = like && like._id ? like._id.toString() : like.toString();
+    return likeId === userIdStr;
+  }) || false;
   const isSaved = savedPostIds.has(post._id.toString());
   
   return {
     ...postObj,
+    mediaUrl: postObj.mediaUrl || postObj.image || '',
+    mediaType: postObj.mediaType || 'image',
+    thumbnail: postObj.thumbnail || (postObj.mediaType === 'image' ? (postObj.mediaUrl || postObj.image) : ''),
+    videoDuration: postObj.videoDuration || null,
     user: postObj.userId || postObj.user,
     userId: postObj.userId?._id || postObj.userId,
     likes: post.likes,
@@ -73,14 +91,96 @@ const enrichPost = async (post, currentUserId) => {
 exports.createPost = async (req, res) => {
   try {
     const { caption } = req.body;
+    const mediaKind = req.body.mediaKind || (req.file?.mimetype?.startsWith('video/') ? 'video' : 'image');
 
     if (!req.file) {
-      return res.status(400).json({ message: 'Image upload is required' });
+      return res.status(400).json({ message: 'Media file is required' });
+    }
+
+    let mediaUrl = req.file.path || req.file.url || '';
+    let thumbnail = '';
+    let videoDuration = null;
+    let videoWidth = null;
+    let videoHeight = null;
+    let mediaType = 'image';
+
+    if (mediaKind === 'video') {
+      mediaType = 'video';
+
+      // Cloudinary returns a `public_id` and the secure URL on `req.file`.
+      // When `eager` is configured in multer-storage-cloudinary, the response
+      // object (sometimes attached as `req.file.eager` or fetched via
+      // `cloudinary.api.resource`) contains the eager-derived thumbnail.
+      const publicId = req.file.filename || req.file.public_id;
+
+      // Try to fetch the eager thumbnail + duration from Cloudinary
+      if (publicId) {
+        try {
+          const details = await cloudinary.api.resource(publicId, {
+            resource_type: 'video',
+            image_metadata: true,
+            colors: false,
+          });
+          // Eager transformations (e.g. JPG thumbnail) live under `eager`
+          if (Array.isArray(details.eager) && details.eager.length > 0) {
+            thumbnail = details.eager[0].secure_url || details.eager[0].url || '';
+          }
+          videoDuration = details.duration || null;
+          videoWidth = details.width || null;
+          videoHeight = details.height || null;
+        } catch (err) {
+          console.warn('Could not fetch video metadata from Cloudinary:', err.message);
+        }
+      }
+
+      // Fallback: use Cloudinary's `so_2` (start-offset) URL transformation
+      // to get a poster frame from the video itself.
+      if (!thumbnail && publicId) {
+        // `f_jpg` converts a frame to JPG; `so_2` starts at 2 seconds in
+        thumbnail = cloudinary.url(publicId, {
+          resource_type: 'video',
+          format: 'jpg',
+          transformation: [
+            { width: 720, height: 720, crop: 'fill', gravity: 'auto' },
+            { start_offset: '2' },
+          ],
+        });
+      }
+
+      // If the client provided a duration (via metadata probe), use it
+      if (req.body.videoDuration) {
+        const parsed = parseFloat(req.body.videoDuration);
+        if (!Number.isNaN(parsed)) {
+          videoDuration = videoDuration || parsed;
+        }
+      }
+
+      // Enforce 60-second cap
+      if (videoDuration && videoDuration > 60) {
+        // Best-effort cleanup: delete the uploaded asset
+        try {
+          if (publicId) {
+            await cloudinary.uploader.destroy(publicId, { resource_type: 'video', invalidate: true });
+          }
+        } catch (_) {}
+        return res.status(400).json({
+          message: 'Video is longer than 60 seconds. Please trim it before uploading.',
+        });
+      }
+    } else {
+      // For image posts, use the same URL for both `mediaUrl` and `thumbnail`
+      thumbnail = mediaUrl;
     }
 
     const post = await Post.create({
       userId: req.user.id,
-      image: req.file.path,
+      image: mediaUrl, // legacy field, also serves as thumbnail for image posts
+      mediaUrl,
+      mediaType,
+      thumbnail,
+      videoDuration,
+      videoWidth,
+      videoHeight,
       caption: caption || '',
     });
 

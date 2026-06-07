@@ -8,6 +8,9 @@ let socketCleanupFns = []
 export const useProfileStore = create((set, get) => ({
   profile: null,
   posts: [],
+  suggested: [],
+  suggestedLoading: false,
+  followState: {},
   loading: false,
   error: null,
 
@@ -25,8 +28,8 @@ export const useProfileStore = create((set, get) => ({
       onSocketEvent('followUpdate', ({ targetUserId, currentUserId, isFollowing, followersCount, followingCount }) => {
         set((state) => ({
           profile: state.profile && state.profile._id === targetUserId
-            ? { 
-                ...state.profile, 
+            ? {
+                ...state.profile,
                 isFollowing: state.profile._id === currentUserId ? isFollowing : state.profile.isFollowing,
                 followersCount: followersCount !== undefined ? followersCount : state.profile.followersCount,
                 followingCount: followingCount !== undefined ? followingCount : state.profile.followingCount,
@@ -65,6 +68,34 @@ export const useProfileStore = create((set, get) => ({
       set({ error: 'Failed to fetch user posts' })
     } finally {
       set({ loading: false })
+    }
+  },
+
+  fetchSuggested: async () => {
+    set({ suggestedLoading: true })
+    try {
+      const res = await API.get('/api/users/suggested')
+      set({ suggested: res.data || [] })
+    } catch (err) {
+      console.error('fetchSuggested error:', err)
+      set({ suggested: [] })
+    } finally {
+      set({ suggestedLoading: false })
+    }
+  },
+
+  handleFollow: async (targetUserId) => {
+    if (!targetUserId) return
+    set((state) => ({
+      followState: { ...state.followState, [targetUserId]: !state.followState[targetUserId] },
+    }))
+    try {
+      await API.post(`/api/users/${targetUserId}/follow`)
+    } catch (err) {
+      // Revert on error
+      set((state) => ({
+        followState: { ...state.followState, [targetUserId]: !state.followState[targetUserId] },
+      }))
     }
   },
 

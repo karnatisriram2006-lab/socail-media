@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Heart, MessageCircle, Grid3X3, X } from 'lucide-react'
+import { Heart, MessageCircle, Grid3X3, X, Play } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { useProfileStore } from '../store/profileStore'
 import PostCard from '../components/post/PostCard'
@@ -10,6 +10,11 @@ import ProfileTabs from '../components/profile/ProfileTabs'
 // Profile Grid Post Component - Instagram style
 function ProfileGridPost({ post, onClick }) {
   const [hovered, setHovered] = useState(false)
+  const isVideo = post?.mediaType === 'video'
+  // For videos, show the thumbnail; for images, use the regular image
+  const displaySrc = isVideo
+    ? (post?.thumbnail || post?.image || post?.imageUrl)
+    : (post?.image || post?.imageUrl || post?.thumbnail)
   
   return (
     <motion.div
@@ -20,11 +25,19 @@ function ProfileGridPost({ post, onClick }) {
       whileHover={{ scale: 1.02 }}
     >
       <img
-        src={post.image}
+        src={displaySrc}
         alt={post.caption || 'Post'}
         className="w-full h-full object-cover"
         loading="lazy"
       />
+      {/* Video play indicator overlay (top-right) */}
+      {isVideo && (
+        <div className="absolute top-2 right-2 pointer-events-none">
+          <div className="bg-black/60 rounded-full p-1.5 flex items-center justify-center">
+            <Play className="w-3.5 h-3.5 text-white fill-white" />
+          </div>
+        </div>
+      )}
       <AnimatePresence>
         {hovered && (
           <motion.div
