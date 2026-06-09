@@ -94,13 +94,22 @@ export const usePostStore = create((set, get) => ({
     // New comment added
     socketCleanupFns.push(
       onSocketEvent('newComment', ({ postId, comment, commentsCount }) => {
+        // Normalize the comment to have a `user` field from `userId` (same as fetchComments does)
+        const normalizedComment = {
+          ...comment,
+          user: comment.user || comment.userId || null,
+          text: comment.text || comment.comment,
+        }
         set((state) => ({
           posts: state.posts.map((p) =>
             p._id === postId
-              ? { 
-                  ...p, 
+              ? {
+                  ...p,
                   commentsCount,
-                  comments: [...(p.comments || []), comment],
+                  // Avoid duplicates: check if this comment already exists (added by addComment action)
+                  comments: (p.comments || []).some((c) => c._id === comment._id)
+                    ? p.comments
+                    : [...(p.comments || []), normalizedComment],
                 }
               : p
           ),
@@ -301,8 +310,8 @@ export const usePostStore = create((set, get) => ({
         ),
       }))
       return list
-    } catch (err) {
-      console.error('fetchComments error:', err)
+    } catch (e) {
+      console.error('fetchComments error:', e)
       return []
     }
   },
@@ -322,7 +331,10 @@ export const usePostStore = create((set, get) => ({
             ? {
                 ...p,
                 commentsCount: res.data.commentsCount,
-                comments: [...(p.comments || []), newComment],
+                // Avoid duplicate: socket may have already added this comment before HTTP response
+                comments: (p.comments || []).some((c) => c._id === newComment._id)
+                  ? p.comments
+                  : [...(p.comments || []), newComment],
               }
             : p
         ),
