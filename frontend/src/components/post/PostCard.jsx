@@ -7,6 +7,7 @@ import {
   Send,
   Bookmark,
   MoreHorizontal,
+  Flag,
 } from "lucide-react";
 import { usePostStore } from "../../store/postStore";
 import { useAuthStore } from "../../store/authStore";
@@ -14,6 +15,7 @@ import { useProfileStore } from "../../store/profileStore";
 import { useToast } from "../ui/Toast";
 import ShareModal from "../chat/ShareModal";
 import MediaPlayer from "./MediaPlayer";
+import ReportModal from "./ReportModal";
 
 function timeAgo(dateStr) {
   if (!dateStr) return "";
@@ -84,6 +86,8 @@ export default function PostCard({ post, isExplore = false }) {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingComments, setLoadingComments] = useState(false);
   const [popHeart, setPopHeart] = useState(false);
@@ -92,6 +96,7 @@ export default function PostCard({ post, isExplore = false }) {
   const [optimisticLikeCount, setOptimisticLikeCount] = useState(
     post?.likesCount ?? 0,
   );
+  const [optimisticFollowing, setOptimisticFollowing] = useState(!!post?.user?.isFollowing);
   const [floatingLikes, setFloatingLikes] = useState([]);
   const commentsListRef = useRef(null);
   const commentInputRef = useRef(null);
@@ -220,10 +225,13 @@ export default function PostCard({ post, isExplore = false }) {
 
   const handleFollow = async () => {
     if (!user || isOwner || !post?.user?._id) return;
+    setOptimisticFollowing((prev) => !prev);
     try {
       await followUser(post.user._id);
     } catch (e) {
+      setOptimisticFollowing((prev) => !prev);
       console.error(e);
+      toast.error("Follow action failed.");
     }
   };
 
@@ -275,12 +283,12 @@ export default function PostCard({ post, isExplore = false }) {
             <button
               onClick={handleFollow}
               className={`text-xs font-medium px-3 py-1 rounded-full transition-colors ${
-                post.user?.isFollowing
+                optimisticFollowing
                   ? "bg-gray-100 text-gray-700 hover:bg-gray-200"
                   : "bg-blue-600 text-white hover:bg-blue-700"
               }`}
             >
-              {post.user?.isFollowing ? "Following" : "Follow"}
+              {optimisticFollowing ? "Following" : "Follow"}
             </button>
           )}
           {isOwner ? (
@@ -292,9 +300,37 @@ export default function PostCard({ post, isExplore = false }) {
               <MoreHorizontal className="w-5 h-5" />
             </button>
           ) : (
-            <button className="text-gray-400 hover:text-gray-600 p-1">
-              <MoreHorizontal className="w-5 h-5" />
-            </button>
+            <div className="relative">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowMenu(!showMenu);
+                }}
+                className="text-gray-400 hover:text-gray-600 p-1"
+              >
+                <MoreHorizontal className="w-5 h-5" />
+              </button>
+              {showMenu && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowMenu(false)}
+                  />
+                  <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-50 min-w-[180px]">
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        setShowReportModal(true);
+                      }}
+                      className="w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
+                    >
+                      <Flag className="w-4 h-4" />
+                      Report post
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -481,12 +517,19 @@ export default function PostCard({ post, isExplore = false }) {
           </button>
         )}
       </form>
+      {/* Report Modal */}
+      {showReportModal && (
+        <ReportModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          targetType="post"
+          targetId={post._id}
+          toast={toast}
+        />
+      )}
       {/* Share Modal */}
       {showShareModal && (
-        <ShareModal
-          post={post}
-          onClose={() => setShowShareModal(false)}
-        />
+        <ShareModal post={post} onClose={() => setShowShareModal(false)} />
       )}
     </motion.div>
   );

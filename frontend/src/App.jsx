@@ -129,7 +129,7 @@ function AppContent() {
   const isAuthPage = ["/login", "/register"].includes(location.pathname);
 
   const navigate = useNavigate();
-  const { user, isInitialized, initialize, forceLogoutReason } = useAuthStore();
+  const { user, isInitialized, initialize } = useAuthStore();
   const { fetchNotifications } = useNotificationStore();
   const { fetchFeed } = usePostStore();
   const { fetchProfile } = useProfileStore();
@@ -144,13 +144,6 @@ function AppContent() {
       initialize();
     }
   }, [initialize]);
-
-  // Handle force-logout signal
-  useEffect(() => {
-    if (forceLogoutReason && !isAuthPage) {
-      navigate("/login", { replace: true });
-    }
-  }, [forceLogoutReason, isAuthPage, navigate]);
 
   // Handle post-login logic and navigation
   useEffect(() => {

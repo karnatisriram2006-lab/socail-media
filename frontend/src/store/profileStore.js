@@ -184,26 +184,38 @@ export const useProfileStore = create((set, get) => ({
     })
     try {
       const res = await API.post(`/api/users/${targetUserId}/follow`)
-      const { isFollowing, followersCount } = res.data
+      const { isFollowing, followersCount, followingCount } = res.data
       set((state) => {
         const next = { ...state }
         if (state.profile) {
-          next.profile = { ...state.profile, isFollowing, followersCount }
-        }
-        // Update the in-memory followers list so the modal reflects the change
-        if (state.profile && state.profile._id === targetUserId && isFollowing) {
-          // The current user just followed this profile -> make sure they appear
-          // in this profile's followers list with isFollowing=true.
-          const me = state.profile && (state.profile._id === targetUserId)
-            ? null // self-follow edge case (we block this in backend)
-            : null;
-          // We can't fully reconstruct the user here; the page will refetch
-          // on next open, which is fine.
+          next.profile = {
+            ...state.profile,
+            isFollowing,
+            followersCount,
+            followingCount: followingCount !== undefined ? followingCount : state.profile.followingCount,
+          }
         }
         return next;
       })
     } catch {
       set({ profile: prevProfile })
+    }
+  },
+
+  blockUser: async (targetUserId) => {
+    try {
+      const res = await API.post(`/api/users/block/${targetUserId}`)
+      const { isBlocked } = res.data
+      set((state) => {
+        if (!state.profile || state.profile._id !== targetUserId) return state
+        return {
+          profile: { ...state.profile, isBlocked },
+        }
+      })
+      return isBlocked
+    } catch (err) {
+      console.error('blockUser error:', err)
+      throw err
     }
   },
 

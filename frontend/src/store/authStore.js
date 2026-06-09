@@ -9,10 +9,8 @@ import {
   browserLocalPersistence,
 } from 'firebase/auth'
 import { auth, googleProvider } from '../config/firebase'
-import API, { authEvents } from '../services/api'
+import API from '../services/api'
 
-// Cache the user object in localStorage so reloads don't bounce to /login
-// while the backend /api/auth/me call is in-flight.
 const USER_CACHE_KEY = 'vsnaps_user_cache'
 const loadCachedUser = () => {
   try {
@@ -31,29 +29,45 @@ const saveCachedUser = (u) => {
   }
 }
 
-// Make sure Firebase uses local persistence (default) so reloads keep the
-// session. This is idempotent.
 setPersistence(auth, browserLocalPersistence).catch(() => { /* ignore */ })
+
+function getFirebaseErrorMessage(code, fallback = 'Authentication failed') {
+  const messages = {
+    'auth/email-already-in-use': 'An account with this email already exists. Please sign in instead.',
+    'auth/weak-password': 'Password is too weak. Please use at least 6 characters.',
+    'auth/invalid-email': 'Please enter a valid email address.',
+    'auth/user-not-found': 'No account found with this email.',
+    'auth/wrong-password': 'Incorrect password. Please try again.',
+    'auth/invalid-credential': 'Invalid email or password. Please try again.',
+    'auth/too-many-requests': 'Too many failed attempts. Please try again later.',
+    'auth/user-disabled': 'This account has been disabled. Please contact support.',
+    'auth/popup-closed-by-user': 'Sign-in popup was closed before completing.',
+    'auth/popup-blocked': 'Sign-in popup was blocked by your browser. Please allow popups.',
+    'auth/account-exists-with-different-credential': 'An account already exists with this email using a different sign-in method.',
+    'auth/network-request-failed': 'Network error. Please check your connection and try again.',
+    'auth/requires-recent-login': 'Please sign in again to perform this action.',
+  };
+  return messages[code] || fallback;
+}
 
 export const useAuthStore = create((set, get) => ({
   user: loadCachedUser(),
   loading: false,
   error: null,
   isInitialized: false,
-  forceLogoutReason: null,
   firebaseUser: null,
 
   initialize: async () => {
     set({ loading: true, error: null })
-    // Wait for Firebase to restore the persisted session, then hydrate the UI.
     return new Promise((resolve) => {
       let resolved = false
       const finish = async () => {
         if (resolved) return
         resolved = true
         const firebaseUser = auth.currentUser
-        if (!firebaseUser) {
-          // No Firebase session — show the login page.
+        const cached = loadCachedUser()
+
+        if (!firebaseUser && !cached) {
           set({ isInitialized: true, user: null, firebaseUser: null })
           saveCachedUser(null)
           set({ loading: false })
@@ -61,9 +75,12 @@ export const useAuthStore = create((set, get) => ({
           return
         }
 
-        // We have a Firebase session. Optimistically let the UI render the
-        // dashboard immediately using the cached user, then refresh the
-        // profile from the backend in the background.
+        if (!firebaseUser && cached) {
+          set({ user: cached, firebaseUser: null, isInitialized: true, loading: false })
+          resolve(cached)
+          return
+        }
+
         set({ firebaseUser, isInitialized: true })
 
         try {
@@ -73,16 +90,11 @@ export const useAuthStore = create((set, get) => ({
           set({ loading: false })
           resolve(res.data)
         } catch (apiErr) {
-          // Don't sign the user out on a transient API failure. Just keep
-          // the cached user on screen and try again on the next render.
-          // We only sign out if the backend explicitly says the user
-          // doesn't exist (404).
           if (apiErr.response?.status === 404) {
             try { await signOut(auth) } catch { /* ignore */ }
             saveCachedUser(null)
             set({ user: null, firebaseUser: null, error: 'Account no longer exists. Please register again.' })
           } else {
-            // Transient error — keep cached user, schedule a retry
             const cached = loadCachedUser()
             set({ user: cached, error: null })
             setTimeout(() => get().refreshUser().catch(() => { /* ignore */ }), 3000)
@@ -92,13 +104,11 @@ export const useAuthStore = create((set, get) => ({
         }
       }
 
-      // onAuthStateChanged fires immediately with the current persisted user
       const unsubscribe = onAuthStateChanged(auth, () => {
         unsubscribe()
         finish()
       })
 
-      // Safety net: if onAuthStateChanged never resolves, finish after 2s
       setTimeout(() => {
         if (!resolved) {
           unsubscribe()
@@ -108,7 +118,6 @@ export const useAuthStore = create((set, get) => ({
     })
   },
 
-  // Re-fetch the user from the backend (called on app focus, etc.)
   refreshUser: async () => {
     if (!auth.currentUser) return null
     try {
@@ -127,7 +136,7 @@ export const useAuthStore = create((set, get) => ({
   },
 
   setError: (error) => set({ error }),
-  clearError: () => set({ error: null, forceLogoutReason: null }),
+  clearError: () => set({ error: null }),
 
   setAuth: (user) => {
     saveCachedUser(user)
@@ -150,9 +159,12 @@ export const useAuthStore = create((set, get) => ({
       return res.data.user
     } catch (err) {
       console.error(err)
-      const errMsg = err.response?.data?.message || err.message || 'Registration failed'
+      const code = err.code || ''
+      const errMsg = getFirebaseErrorMessage(code, err.response?.data?.message || err.message || 'Registration failed')
       set({ error: errMsg, isInitialized: true })
-      throw new Error(errMsg)
+      const newError = new Error(errMsg)
+      newError.code = code
+      throw newError
     } finally {
       set({ loading: false })
     }
@@ -174,13 +186,12 @@ export const useAuthStore = create((set, get) => ({
       return res.data.user
     } catch (err) {
       console.error(err)
-      if (err.response?.status === 404) {
-        set({ error: 'User not found. Please register first.' })
-      } else {
-        set({ error: err.response?.data?.message || err.message || 'Login failed' })
-      }
-      set({ isInitialized: true })
-      throw err
+      const code = err.code || ''
+      const errMsg = getFirebaseErrorMessage(code, err.response?.data?.message || err.message || 'Login failed')
+      set({ error: errMsg, isInitialized: true })
+      const error = new Error(errMsg)
+      error.code = code
+      throw error
     } finally {
       set({ loading: false })
     }
@@ -204,20 +215,12 @@ export const useAuthStore = create((set, get) => ({
       return res.data.user
     } catch (err) {
       console.error('Google login error:', err)
-
-      let errorMsg = 'Google login failed'
-      if (err.code === 'auth/popup-blocked') {
-        errorMsg = 'Pop-up blocked. Please allow pop-ups and try again.'
-      } else if (err.code === 'auth/popup-closed-by-user') {
-        errorMsg = 'Login was cancelled'
-      } else if (err.response?.data?.message) {
-        errorMsg = err.response.data.message
-      } else if (err.message) {
-        errorMsg = err.message
-      }
-
-      set({ isInitialized: true, error: errorMsg })
-      throw new Error(errorMsg)
+      const code = err.code || ''
+      const errMsg = getFirebaseErrorMessage(code, err.response?.data?.message || err.message || 'Google sign-in failed')
+      set({ isInitialized: true, error: errMsg })
+      const error = new Error(errMsg)
+      error.code = code
+      throw error
     } finally {
       set({ loading: false })
     }
@@ -230,12 +233,7 @@ export const useAuthStore = create((set, get) => ({
       console.error('Firebase sign out error:', err.message)
     }
     saveCachedUser(null)
-    set({ user: null, firebaseUser: null, isInitialized: false, error: null, forceLogoutReason: null })
-  },
-
-  handleForceLogout: (reason) => {
-    saveCachedUser(null)
-    set({ forceLogoutReason: reason, user: null, firebaseUser: null, isInitialized: true })
+    set({ user: null, firebaseUser: null, isInitialized: false, error: null })
   },
 
   updateProfile: async (formData) => {
@@ -258,9 +256,13 @@ export const useAuthStore = create((set, get) => ({
   },
 }))
 
-// Force-logout from the API client (only on truly unrecoverable token failures)
+// Force-logout listener for API client (only on truly unrecoverable token failures)
 if (typeof window !== 'undefined') {
-  authEvents.onForceLogout((reason) => {
-    useAuthStore.getState().handleForceLogout(reason)
-  })
+  // eslint-disable-next-line no-undef
+  import('../services/api').then(({ authEvents }) => {
+    authEvents.onForceLogout((reason) => {
+      // Reserved for future use
+      console.warn('[Auth] Force logout:', reason);
+    });
+  });
 }

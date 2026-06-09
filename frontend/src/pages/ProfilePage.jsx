@@ -1,19 +1,30 @@
-import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Heart, MessageCircle, Grid3X3, X, Play, Loader2, UserPlus, UserCheck, UserMinus } from 'lucide-react'
-import { useAuthStore } from '../store/authStore'
-import { useProfileStore } from '../store/profileStore'
-import PostCard from '../components/post/PostCard'
-import ProfileTabs from '../components/profile/ProfileTabs'
-import { useToast } from '../components/ui/Toast'
+import { useEffect, useState } from "react";
+import { useParams, Link } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Heart,
+  MessageCircle,
+  Grid3X3,
+  X,
+  Play,
+  Loader2,
+  UserPlus,
+  UserCheck,
+  UserMinus,
+  Ban,
+} from "lucide-react";
+import { useAuthStore } from "../store/authStore";
+import { useProfileStore } from "../store/profileStore";
+import PostCard from "../components/post/PostCard";
+import ProfileTabs from "../components/profile/ProfileTabs";
+import { useToast } from "../components/ui/Toast";
 
 function ProfileGridPost({ post, onClick }) {
-  const [hovered, setHovered] = useState(false)
-  const isVideo = post?.mediaType === 'video'
+  const [hovered, setHovered] = useState(false);
+  const isVideo = post?.mediaType === "video";
   const displaySrc = isVideo
-    ? (post?.thumbnail || post?.image || post?.imageUrl)
-    : (post?.image || post?.imageUrl || post?.thumbnail)
+    ? post?.thumbnail || post?.image || post?.imageUrl
+    : post?.image || post?.imageUrl || post?.thumbnail;
 
   return (
     <motion.div
@@ -25,7 +36,7 @@ function ProfileGridPost({ post, onClick }) {
     >
       <img
         src={displaySrc}
-        alt={post.caption || 'Post'}
+        alt={post.caption || "Post"}
         className="w-full h-full object-cover"
         loading="lazy"
       />
@@ -56,13 +67,13 @@ function ProfileGridPost({ post, onClick }) {
         )}
       </AnimatePresence>
     </motion.div>
-  )
+  );
 }
 
 function FollowListItem({ user, currentUser, onFollow, busy }) {
-  if (!user) return null
-  const isMe = currentUser?._id === user._id
-  const isFollowing = !!user.isFollowing
+  if (!user) return null;
+  const isMe = currentUser?._id === user._id;
+  const isFollowing = !!user.isFollowing;
 
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors">
@@ -70,12 +81,12 @@ function FollowListItem({ user, currentUser, onFollow, busy }) {
         <img
           src={
             user.profileImage ||
-            `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username || 'U')}&background=random&color=fff&size=100`
+            `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username || "U")}&background=random&color=fff&size=100`
           }
           alt={user.username}
           className="w-11 h-11 rounded-full object-cover"
           onError={(e) => {
-            e.target.src = `https://ui-avatars.com/api/?name=${user.username || 'U'}&background=random&color=fff&size=100`
+            e.target.src = `https://ui-avatars.com/api/?name=${user.username || "U"}&background=random&color=fff&size=100`;
           }}
         />
       </Link>
@@ -97,8 +108,8 @@ function FollowListItem({ user, currentUser, onFollow, busy }) {
           disabled={busy}
           className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed ${
             isFollowing
-              ? 'bg-gray-100 text-gray-800 hover:bg-red-50 hover:text-red-600 group'
-              : 'bg-blue-500 text-white hover:bg-blue-600'
+              ? "bg-gray-100 text-gray-800 hover:bg-red-50 hover:text-red-600 group"
+              : "bg-blue-500 text-white hover:bg-blue-600"
           }`}
         >
           {busy ? (
@@ -123,18 +134,26 @@ function FollowListItem({ user, currentUser, onFollow, busy }) {
         </button>
       )}
     </div>
-  )
+  );
 }
 
-function FollowListModal({ isOpen, onClose, title, listState, currentUser, onFollow, onLoadMore }) {
+function FollowListModal({
+  isOpen,
+  onClose,
+  title,
+  listState,
+  currentUser,
+  onFollow,
+  onLoadMore,
+}) {
   const listRef = (el) => {
-    if (!el) return
+    if (!el) return;
     el.onscroll = () => {
       if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) {
-        if (listState.hasMore && !listState.loading) onLoadMore()
+        if (listState.hasMore && !listState.loading) onLoadMore();
       }
-    }
-  }
+    };
+  };
 
   return (
     <AnimatePresence>
@@ -156,7 +175,12 @@ function FollowListModal({ isOpen, onClose, title, listState, currentUser, onFol
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 shrink-0">
               <div className="w-8" />
               <h2 className="font-semibold text-gray-900">
-                {title} {listState.total > 0 && <span className="text-gray-500 font-normal">· {listState.total}</span>}
+                {title}{" "}
+                {listState.total > 0 && (
+                  <span className="text-gray-500 font-normal">
+                    · {listState.total}
+                  </span>
+                )}
               </h2>
               <button
                 onClick={onClose}
@@ -176,7 +200,9 @@ function FollowListModal({ isOpen, onClose, title, listState, currentUser, onFol
               ) : listState.list.length === 0 ? (
                 <div className="py-12 text-center text-gray-500">
                   <p className="text-sm">
-                    {title === 'Followers' ? 'No followers yet' : 'Not following anyone yet'}
+                    {title === "Followers"
+                      ? "No followers yet"
+                      : "Not following anyone yet"}
                   </p>
                 </div>
               ) : (
@@ -207,12 +233,12 @@ function FollowListModal({ isOpen, onClose, title, listState, currentUser, onFol
         </motion.div>
       )}
     </AnimatePresence>
-  )
+  );
 }
 
 export default function ProfilePage() {
-  const { username } = useParams()
-  const { user: currentUser } = useAuthStore()
+  const { username } = useParams();
+  const { user: currentUser } = useAuthStore();
   const {
     profile,
     posts,
@@ -226,84 +252,85 @@ export default function ProfilePage() {
     fetchFollowers,
     fetchFollowing,
     resetFollowList,
-  } = useProfileStore()
-  const toast = useToast()
-  const [activeTab, setActiveTab] = useState('posts')
-  const [selectedPost, setSelectedPost] = useState(null)
-  const [showFollowersModal, setShowFollowersModal] = useState(false)
-  const [showFollowingModal, setShowFollowingModal] = useState(false)
+  } = useProfileStore();
+  const toast = useToast();
+  const [activeTab, setActiveTab] = useState("posts");
+  const [selectedPost, setSelectedPost] = useState(null);
+  const [showFollowersModal, setShowFollowersModal] = useState(false);
+  const [showFollowingModal, setShowFollowingModal] = useState(false);
 
-  const isOwner = currentUser?._id === (profile?._id) || currentUser?.username === username
-  const targetId = username || currentUser?._id
+  const isOwner =
+    currentUser?._id === profile?._id || currentUser?.username === username;
+  const targetId = username || currentUser?._id;
 
   useEffect(() => {
     if (targetId) {
-      fetchProfile(targetId)
-      fetchUserPosts(targetId)
+      fetchProfile(targetId);
+      fetchUserPosts(targetId);
     }
-  }, [targetId, fetchProfile, fetchUserPosts])
+  }, [targetId, fetchProfile, fetchUserPosts]);
 
   useEffect(() => {
-    resetFollowList('followers')
-    resetFollowList('following')
-  }, [profile?._id, resetFollowList])
+    resetFollowList("followers");
+    resetFollowList("following");
+  }, [profile?._id, resetFollowList]);
 
   const openFollowersModal = () => {
-    if (!profile?._id) return
-    setShowFollowersModal(true)
-    fetchFollowers(profile._id, { page: 1, append: false })
-  }
+    if (!profile?._id) return;
+    setShowFollowersModal(true);
+    fetchFollowers(profile._id, { page: 1, append: false });
+  };
   const openFollowingModal = () => {
-    if (!profile?._id) return
-    setShowFollowingModal(true)
-    fetchFollowing(profile._id, { page: 1, append: false })
-  }
+    if (!profile?._id) return;
+    setShowFollowingModal(true);
+    fetchFollowing(profile._id, { page: 1, append: false });
+  };
   const loadMoreFollowers = () => {
-    if (!profile?._id) return
-    fetchFollowers(profile._id, { page: followersList.page + 1, append: true })
-  }
+    if (!profile?._id) return;
+    fetchFollowers(profile._id, { page: followersList.page + 1, append: true });
+  };
   const loadMoreFollowing = () => {
-    if (!profile?._id) return
-    fetchFollowing(profile._id, { page: followingList.page + 1, append: true })
-  }
+    if (!profile?._id) return;
+    fetchFollowing(profile._id, { page: followingList.page + 1, append: true });
+  };
 
   const handleInlineFollow = async (targetId, currentlyFollowing) => {
-    if (!targetId) return
+    if (!targetId) return;
     try {
-      await followUser(targetId)
-      toast.success(currentlyFollowing ? 'Unfollowed' : 'Following')
+      await followUser(targetId);
+      toast.success(currentlyFollowing ? "Unfollowed" : "Following");
       if (showFollowersModal) {
-        resetFollowList('followers')
-        fetchFollowers(profile._id, { page: 1, append: false })
+        resetFollowList("followers");
+        fetchFollowers(profile._id, { page: 1, append: false });
       }
       if (showFollowingModal) {
-        resetFollowList('following')
-        fetchFollowing(profile._id, { page: 1, append: false })
+        resetFollowList("following");
+        fetchFollowing(profile._id, { page: 1, append: false });
       }
     } catch (e) {
-      toast.error('Action failed. Please try again.')
+      toast.error("Action failed. Please try again.");
     }
-  }
+  };
 
   if (loading && !profile) {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
       </div>
-    )
+    );
   }
 
   if (!profile) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-500">{error || 'User not found'}</p>
+        <p className="text-gray-500">{error || "User not found"}</p>
       </div>
-    )
+    );
   }
 
-  const followersCount = profile.followersCount ?? 0
-  const followingCount = profile.followingCount ?? 0
-  const postsCount = profile.postsCount ?? posts.length ?? 0
+  const followersCount = profile.followersCount ?? 0;
+  const followingCount = profile.followingCount ?? 0;
+  const postsCount = profile.postsCount ?? posts.length ?? 0;
 
   return (
     <div className="max-w-4xl mx-auto py-6 px-4">
@@ -312,18 +339,31 @@ export default function ProfilePage() {
           <div className="relative">
             <div className="w-28 h-28 sm:w-36 sm:h-36 rounded-full p-1 bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-500">
               <img
-                src={profile.profileImage || 'https://ui-avatars.com/api/?name=' + (profile.username || 'U') + '&background=random&color=fff&size=200'}
+                src={
+                  profile.profileImage ||
+                  "https://ui-avatars.com/api/?name=" +
+                    (profile.username || "U") +
+                    "&background=random&color=fff&size=200"
+                }
                 alt={profile.username}
                 className="w-full h-full rounded-full object-cover border-3 border-white"
                 onError={(e) => {
-                  e.target.src = `https://ui-avatars.com/api/?name=${profile.username || 'U'}&background=random&color=fff&size=200`
+                  e.target.src = `https://ui-avatars.com/api/?name=${profile.username || "U"}&background=random&color=fff&size=200`;
                 }}
               />
             </div>
             {profile.isVerified && (
               <div className="absolute bottom-1 right-1 bg-blue-500 rounded-full p-1">
-                <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a a1 1 0 00-1.414 1.414l2 2 a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                <svg
+                  className="w-4 h-4 text-white"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a a1 1 0 00-1.414 1.414l2 2 a1 1 0 001.414 0l4-4z"
+                    clipRule="evenodd"
+                  />
                 </svg>
               </div>
             )}
@@ -331,7 +371,9 @@ export default function ProfilePage() {
 
           <div className="flex-1 text-center sm:text-left">
             <div className="flex flex-col sm:flex-row items-center gap-3 mb-4">
-              <h1 className="text-2xl font-light text-gray-900">{profile.username}</h1>
+              <h1 className="text-2xl font-light text-gray-900">
+                {profile.username}
+              </h1>
               {isOwner ? (
                 <Link
                   to="/edit-profile"
@@ -346,26 +388,46 @@ export default function ProfilePage() {
                   whileTap={{ scale: 0.98 }}
                   className={`px-6 py-1.5 rounded-lg text-sm font-semibold transition-all ${
                     profile.isFollowing
-                      ? 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                      : 'bg-blue-500 text-white hover:bg-blue-600'
+                      ? "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                      : "bg-blue-500 text-white hover:bg-blue-600"
                   }`}
                 >
-                  {profile.isFollowing ? 'Following' : 'Follow'}
+                  {profile.isFollowing ? "Following" : "Follow"}
                 </motion.button>
               ) : null}
               {!isOwner && currentUser && (
-                <Link
-                  to={`/messages/${profile._id}`}
-                  className="px-4 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg text-sm font-medium transition-colors"
-                >
-                  Message
-                </Link>
+                <>
+                  <Link
+                    to={`/messages/${profile._id}`}
+                    className="px-4 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    Message
+                  </Link>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const { blockUser } = useProfileStore.getState();
+                        const blocked = await blockUser(profile._id);
+                        toast.success(blocked ? "User blocked" : "User unblocked");
+                      } catch {
+                        toast.error("Failed to update block status");
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-medium transition-colors flex items-center gap-1"
+                    title={profile.isBlocked ? "Unblock user" : "Block user"}
+                  >
+                    <Ban className="w-3.5 h-3.5" />
+                    {profile.isBlocked ? "Blocked" : "Block"}
+                  </button>
+                </>
               )}
             </div>
 
             <div className="flex justify-center sm:justify-start gap-8 mb-4">
               <div className="text-center">
-                <span className="font-semibold text-gray-900">{postsCount}</span>
+                <span className="font-semibold text-gray-900">
+                  {postsCount}
+                </span>
                 <span className="text-gray-500 ml-1">posts</span>
               </div>
               <button
@@ -373,7 +435,9 @@ export default function ProfilePage() {
                 className="text-center hover:opacity-80 transition-opacity cursor-pointer"
                 title="View followers"
               >
-                <span className="font-semibold text-gray-900">{followersCount}</span>
+                <span className="font-semibold text-gray-900">
+                  {followersCount}
+                </span>
                 <span className="text-gray-500 ml-1">followers</span>
               </button>
               <button
@@ -381,17 +445,23 @@ export default function ProfilePage() {
                 className="text-center hover:opacity-80 transition-opacity cursor-pointer"
                 title="View following"
               >
-                <span className="font-semibold text-gray-900">{followingCount}</span>
+                <span className="font-semibold text-gray-900">
+                  {followingCount}
+                </span>
                 <span className="text-gray-500 ml-1">following</span>
               </button>
             </div>
 
             <div className="hidden sm:block">
               {profile.name && (
-                <p className="font-semibold text-gray-900 text-sm">{profile.name}</p>
+                <p className="font-semibold text-gray-900 text-sm">
+                  {profile.name}
+                </p>
               )}
               {profile.bio && (
-                <p className="text-gray-700 text-sm whitespace-pre-wrap mt-1">{profile.bio}</p>
+                <p className="text-gray-700 text-sm whitespace-pre-wrap mt-1">
+                  {profile.bio}
+                </p>
               )}
             </div>
           </div>
@@ -399,10 +469,14 @@ export default function ProfilePage() {
 
         <div className="sm:hidden mt-4 text-center">
           {profile.name && (
-            <p className="font-semibold text-gray-900 text-sm">{profile.name}</p>
+            <p className="font-semibold text-gray-900 text-sm">
+              {profile.name}
+            </p>
           )}
           {profile.bio && (
-            <p className="text-gray-700 text-sm whitespace-pre-wrap mt-1">{profile.bio}</p>
+            <p className="text-gray-700 text-sm whitespace-pre-wrap mt-1">
+              {profile.bio}
+            </p>
           )}
         </div>
       </div>
@@ -478,5 +552,5 @@ export default function ProfilePage() {
         onLoadMore={loadMoreFollowing}
       />
     </div>
-  )
+  );
 }

@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  # ──────────────────────────────────────────
+  # MongoDB
+  # ──────────────────────────────────────────
+  mongodb:
+    image: mongo:7
+    container_name: social-media-mongo
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "127.0.0.1:27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: social_media
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh --quiet
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ──────────────────────────────────────────
+  # Redis (cache layer)
+  # ──────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: social-media-redis
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ──────────────────────────────────────────
+  # Backend API
+  # ──────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: social-media-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ./backend/.env
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/social_media
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=production
+    volumes:
+      - backend_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ──────────────────────────────────────────
+  # Cleanup Cron Job (runs daily at 3 AM)
+  # ──────────────────────────────────────────
+  cleanup-cron:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: social-media-cleanup
+    restart: unless-stopped
+    depends_on:
+      - backend
+    env_file:
+      - ./backend/.env
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/social_media
+    command: >
+      sh -c "
+        echo '0 3 * * * cd /app && node jobs/cleanup.js >> /var/log/cleanup.log 2>&1' > /etc/crontabs/root &&
+        crond -f -l 2
+      "
+
+volumes:
+  mongo_data:
+  redis_data:
+  backend_uploads:

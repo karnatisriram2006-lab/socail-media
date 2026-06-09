@@ -72,6 +72,16 @@ const postSchema = new mongoose.Schema(
   }
 );
 
+// ──────────────────────────────────────────────
+// Performance Indexes
+// ──────────────────────────────────────────────
+// Feed queries by user (sorted by newest first)
+postSchema.index({ userId: 1, createdAt: -1 });
+// Explore page & global feed
+postSchema.index({ createdAt: -1 });
+// Hashtag search
+postSchema.index({ hashtags: 1 });
+
 // Extract hashtags before saving
 postSchema.pre('save', function (next) {
   if (this.caption) {

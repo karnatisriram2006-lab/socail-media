@@ -56,6 +56,12 @@ const userSchema = new mongoose.Schema(
         ref: 'Post',
       },
     ],
+    blockedUsers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
     isVerified: {
       type: Boolean,
       default: false,
@@ -76,8 +82,10 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// Indexes for search queries
+// Indexes for search queries and feed performance
 userSchema.index({ username: 'text', name: 'text' });
+userSchema.index({ createdAt: -1 });                           // explore / user listing
+userSchema.index({ 'blockedUsers': 1 });                       // blocked user lookups
 
 // Virtual for followers count
 userSchema.virtual('followersCount').get(function () {

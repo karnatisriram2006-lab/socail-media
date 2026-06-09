@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuthStore } from '../store/authStore'
 import Input from '../components/ui/Input'
@@ -7,8 +7,9 @@ import Button from '../components/ui/Button'
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
 
 export default function LoginPage() {
+  const location = useLocation();
   const { login, loginWithGoogle, loading, error, clearError } = useAuthStore()
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(location.state?.email || '')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [formError, setFormError] = useState('')
@@ -24,7 +25,7 @@ export default function LoginPage() {
     try {
       await login(email, password)
     } catch (err) {
-      setFormError(err.response?.data?.message || err.message || 'Login failed')
+      setFormError(err.message || 'Login failed')
     }
   }
 
@@ -47,6 +48,16 @@ export default function LoginPage() {
           <h1 className="text-3xl font-bold mb-2">Welcome Back</h1>
           <p className="text-gray-500 text-sm">Sign in to continue to VibeSnaps</p>
         </div>
+
+        {location.state?.email && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="bg-blue-50 text-blue-700 text-sm p-3 rounded-lg mb-4"
+          >
+            Signing in with <strong>{location.state.email}</strong>
+          </motion.div>
+        )}
 
         {(error || formError) && (
           <motion.div

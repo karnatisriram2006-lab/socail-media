@@ -1,22 +1,6 @@
 import axios from 'axios'
 import { auth } from '../config/firebase'
 
-// Event channel the auth store subscribes to. We never call signOut()
-// directly from inside the interceptor so we don't create a logout loop
-// (signOut → triggers a re-render → another API call fails → signOut again).
-export const authEvents = {
-  listeners: new Set(),
-  onForceLogout(handler) {
-    this.listeners.add(handler)
-    return () => this.listeners.delete(handler)
-  },
-  emitForceLogout(reason) {
-    this.listeners.forEach((h) => {
-      try { h(reason) } catch (e) { console.error(e) }
-    })
-  },
-}
-
 const API = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000',
   withCredentials: true,
@@ -56,17 +40,20 @@ API.interceptors.response.use(
           originalRequest.headers = originalRequest.headers || {}
           originalRequest.headers.Authorization = `Bearer ${freshToken}`
           return API(originalRequest)
-        } catch (refreshError) {
-          console.error('Token refresh failed:', refreshError.message)
-          // The Firebase user is no longer recoverable. Tell the auth store.
-          // The store will sign out + redirect — we just signal it here.
-          authEvents.emitForceLogout('Session expired. Please login again.')
-          return Promise.reject(refreshError)
-        }
-      } else {
-        // No Firebase session at all. Tell the store to clean up.
-        authEvents.emitForceLogout('Please login to continue.')
-        return Promise.reject(error)
+          } catch (refreshError) {
+            // Token refresh failed (e.g. after ~24h of inactivity the refresh
+            // token expires). Do NOT force the user to log out — keep the
+            // cached session on screen so they stay logged in until they
+            // manually click "Sign Out". API calls that need auth will simply
+            // fail, and the UI can show a "Please re-login" toast instead.
+            console.warn('Token refresh failed (user may need to re-login for new actions):', refreshError.message)
+            return Promise.reject(refreshError)
+          }
+        } else {
+          // No Firebase session — but the user may still have cached data.
+          // Don't force logout here either; let the auth store's initialize()
+          // handle it based on onAuthStateChanged.
+          return Promise.reject(error)
       }
     }
 

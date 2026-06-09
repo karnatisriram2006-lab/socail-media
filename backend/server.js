@@ -11,6 +11,35 @@ const compression = require('compression');
 const mongoose = require('mongoose');
 const connectDB = require('./config/db');
 const User = require('./models/User');
+const cron = require('node-cron');
+
+// ──────────────────────────────────────────────
+// Environment variable validation (fail fast)
+// ──────────────────────────────────────────────
+const REQUIRED_ENV_VARS = [
+  'MONGODB_URI',
+  'FIREBASE_PROJECT_ID',
+  'FIREBASE_CLIENT_EMAIL',
+  'FIREBASE_PRIVATE_KEY',
+  'CLOUDINARY_CLOUD_NAME',
+  'CLOUDINARY_API_KEY',
+  'CLOUDINARY_API_SECRET',
+];
+const MISSING_VARS = REQUIRED_ENV_VARS.filter((v) => !process.env[v]);
+if (MISSING_VARS.length) {
+  console.error(`[FATAL] Missing required environment variables: ${MISSING_VARS.join(', ')}`);
+  process.exit(1);
+}
+
+// In production, CLIENT_URL must be explicitly set (never use localhost)
+if (process.env.NODE_ENV === 'production' && !process.env.CLIENT_URL) {
+  console.error('[FATAL] CLIENT_URL is required in production mode');
+  process.exit(1);
+}
+
+// ──────────────────────────────────────────────
+// Connect to MongoDB
+// ──────────────────────────────────────────────
 connectDB();
 
 const app = express();
@@ -141,12 +170,41 @@ io.on('connection', (socket) => {
   });
 });
 
+// ──────────────────────────────────────────────
+// Security headers (Helmet with CSP)
+// ──────────────────────────────────────────────
 app.use(helmet({
   crossOriginResourcePolicy: false,
+  contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      imgSrc: ["'self'", 'data:', 'blob:',
+        'https://res.cloudinary.com',
+        'https://images.unsplash.com',
+      ],
+      connectSrc: ["'self'",
+        process.env.CLIENT_URL || 'http://localhost:5173',
+        'https://*.cloudinary.com',
+        'wss://*.firebaseio.com',
+      ],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      mediaSrc: ["'self'", 'blob:', 'https://res.cloudinary.com'],
+      frameSrc: ["'none'"],
+      objectSrc: ["'none'"],
+    },
+  } : false,
 }));
 
+// ──────────────────────────────────────────────
+// CORS - strict origin in production
+// ──────────────────────────────────────────────
+const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: process.env.NODE_ENV === 'production'
+    ? CLIENT_URL  // Single origin in production
+    : [CLIENT_URL, 'http://localhost:5173', 'http://localhost:3000'],
   credentials: true,
 }));
 
@@ -154,8 +212,13 @@ app.use(compression());
 
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-app.use(express.json({ limit: '10kb' }));
-app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+// ──────────────────────────────────────────────
+// Body parsing with sensible limits
+// ──────────────────────────────────────────────
+// 1 MB for JSON (enough for most requests)
+app.use(express.json({ limit: '1mb' }));
+// 10 MB for form data with file uploads (handled before multer)
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.use(mongoSanitize());
 
@@ -179,6 +242,19 @@ app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/google', authLimiter);
 
+// Stricter rate limit for authenticated endpoints (prevent abuse)
+const authenticatedLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,  // 1 minute window
+  max: 100,                  // 100 requests per minute per IP
+  message: { message: 'Too many requests. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => { /* never skip, applied only to protected routes via middleware */ return false },
+});
+app.use('/api/posts', authenticatedLimiter);
+app.use('/api/users', authenticatedLimiter);
+app.use('/api/notifications', authenticatedLimiter);
+app.use('/api/chat', authenticatedLimiter);
 // Request logging middleware
 app.use((req, res, next) => {
   const start = Date.now();
@@ -196,6 +272,8 @@ app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/posts', require('./routes/postRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/chat', require('./routes/chatRoutes'));
+app.use('/api/reports', require('./routes/reportRoutes'));
+app.use('/api/admin', require('./routes/adminRoutes'));
 
 app.get('/', (req, res) => {
   res.status(200).json({
@@ -203,6 +281,20 @@ app.get('/', (req, res) => {
     message: 'Social Media API is running smoothly',
     uptime: process.uptime(),
     dbState: ['disconnected', 'connected', 'connecting', 'disconnecting'][mongoose.connection.readyState],
+  });
+});
+
+// GET /health — Extended health check with Redis status
+app.get('/health', async (req, res) => {
+  const { cache } = require('./config/redis');
+  const cacheStats = await cache.stats();
+  res.status(200).json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    mongo: ['disconnected', 'connected', 'connecting', 'disconnecting'][mongoose.connection.readyState],
+    redis: cacheStats,
+    memory: process.memoryUsage(),
   });
 });
 
@@ -257,6 +349,18 @@ app.use((err, req, res, next) => {
     stack: process.env.NODE_ENV === 'production' ? null : err.stack,
   });
 });
+
+// ──────────────────────────────────────────────
+// Scheduled Tasks (Production only)
+// ──────────────────────────────────────────────
+if (process.env.NODE_ENV === 'production') {
+  // Run cleanup every day at 3:00 AM
+  cron.schedule('0 3 * * *', () => {
+    console.log('[Cron] Running daily cleanup...');
+    require('./jobs/cleanup')();
+  });
+  console.log('[Cron] Scheduled daily cleanup at 3:00 AM');
+}
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {

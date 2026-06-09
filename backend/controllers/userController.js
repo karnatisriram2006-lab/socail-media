@@ -1,6 +1,8 @@
 const User = require('../models/User');
 const Post = require('../models/Post');
 const Notification = require('../models/Notification');
+const { sendFollowerNotification } = require('../services/emailService');
+const { cache, cacheKeys } = require('../config/redis');
 
 // Helper: pick a user by id or username, return null if not found.
 const findUser = async (idOrUsername) => {
@@ -20,12 +22,17 @@ const buildProfileResponse = (user, currentUserId) => {
   // The frontend never needs the full arrays in the profile payload.
   obj.followers = [];
   obj.following = [];
+  obj.blockedUsers = [];
   if (currentUserId) {
     obj.isFollowing = (user.followers || []).some(
       (fid) => fid.toString() === currentUserId.toString(),
     );
+    obj.isBlocked = (user.blockedUsers || []).some(
+      (bid) => bid.toString() === currentUserId.toString(),
+    );
   } else {
     obj.isFollowing = false;
+    obj.isBlocked = false;
   }
   return obj;
 };
@@ -34,13 +41,26 @@ const buildProfileResponse = (user, currentUserId) => {
 exports.getUserById = async (req, res) => {
   try {
     const { id } = req.params;
+    const cacheKey = cacheKeys.user(id);
+    const cached = await cache.get(cacheKey);
+    if (cached) {
+      if (req.user?.id) {
+        cached.isFollowing = (cached.followers || []).some(
+          (fid) => fid.toString() === req.user.id.toString(),
+        );
+      }
+      return res.status(200).json(cached);
+    }
+
     const user = await findUser(id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    // Compute post count separately so we don't depend on a virtual.
     const postsCount = await Post.countDocuments({ userId: user._id });
     const obj = buildProfileResponse(user, req.user?.id);
     obj.postsCount = postsCount;
+
+    await cache.set(cacheKey, obj, 300);
+
     return res.status(200).json(obj);
   } catch (error) {
     return res.status(500).json({ message: 'Server error', error: error.message });
@@ -51,12 +71,27 @@ exports.getUserById = async (req, res) => {
 exports.getUserProfile = async (req, res) => {
   try {
     const { username } = req.params;
+    const cacheKey = cacheKeys.userProfile(username);
+
+    const cached = await cache.get(cacheKey);
+    if (cached) {
+      if (req.user?.id) {
+        cached.isFollowing = (cached.followers || []).some(
+          (fid) => fid.toString() === req.user.id.toString(),
+        );
+      }
+      return res.status(200).json(cached);
+    }
+
     const user = await User.findOne({ username: username.toLowerCase() });
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     const postsCount = await Post.countDocuments({ userId: user._id });
     const obj = buildProfileResponse(user, req.user?.id);
     obj.postsCount = postsCount;
+
+    await cache.set(cacheKey, obj, 300);
+
     return res.status(200).json(obj);
   } catch (error) {
     return res.status(500).json({ message: 'Server error', error: error.message });
@@ -75,13 +110,11 @@ const buildFollowListResponse = async (user, kind, page, limit, requesterId) => 
   const users = await User.find({ _id: { $in: pageIds } })
     .select('username name profileImage isVerified');
 
-  // Preserve the original order of the array.
   const userMap = new Map(users.map((u) => [u._id.toString(), u]));
   const ordered = pageIds
     .map((id) => userMap.get(id.toString()))
     .filter(Boolean);
 
-  // Compute who the requester follows so each entry can carry the flag.
   let requesterFollowingIds = new Set();
   if (requesterId) {
     const me = await User.findById(requesterId).select('following');
@@ -114,6 +147,12 @@ exports.getFollowers = async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
 
+    const cacheKey = cacheKeys.userFollowers(user._id, page);
+    const cached = await cache.get(cacheKey);
+    if (cached) {
+      return res.status(200).json(cached);
+    }
+
     const data = await buildFollowListResponse(
       user,
       'followers',
@@ -121,6 +160,7 @@ exports.getFollowers = async (req, res) => {
       limit,
       req.user?.id,
     );
+    await cache.set(cacheKey, data, 120);
     return res.status(200).json(data);
   } catch (error) {
     return res.status(500).json({ message: 'Server error', error: error.message });
@@ -136,6 +176,12 @@ exports.getFollowing = async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
 
+    const cacheKey = cacheKeys.userFollowing(user._id, page);
+    const cached = await cache.get(cacheKey);
+    if (cached) {
+      return res.status(200).json(cached);
+    }
+
     const data = await buildFollowListResponse(
       user,
       'following',
@@ -143,6 +189,7 @@ exports.getFollowing = async (req, res) => {
       limit,
       req.user?.id,
     );
+    await cache.set(cacheKey, data, 120);
     return res.status(200).json(data);
   } catch (error) {
     return res.status(500).json({ message: 'Server error', error: error.message });
@@ -177,6 +224,11 @@ exports.updateUserProfile = async (req, res) => {
 
     const updatedUser = await User.findById(user._id);
 
+    // Invalidate cache for this user
+    await cache.del(cacheKeys.user(user._id));
+    await cache.del(cacheKeys.userProfile(user.username));
+    await cache.delByPattern(`user:${user._id}:*`);
+
     return res.status(200).json({
       message: 'Profile updated successfully',
       user: buildProfileResponse(updatedUser, req.user.id),
@@ -207,7 +259,6 @@ exports.followUnfollowUser = async (req, res) => {
     );
 
     if (isFollowing) {
-      // Unfollow
       currentUser.following = currentUser.following.filter(
         (id) => id.toString() !== targetUserId.toString(),
       );
@@ -222,6 +273,11 @@ exports.followUnfollowUser = async (req, res) => {
         receiverId: targetUserId,
         type: 'follow',
       });
+
+      // Invalidate follow-related caches
+      await cache.delByPattern(`user:${targetUserId}:*`);
+      await cache.delByPattern(`user:${currentUserId}:*`);
+      await cache.del(cacheKeys.suggested(currentUserId));
 
       if (global.io) {
         global.io.emit('followUpdate', {
@@ -240,7 +296,6 @@ exports.followUnfollowUser = async (req, res) => {
         followingCount: currentUser.following.length,
       });
     } else {
-      // Follow
       currentUser.following.push(targetUserId);
       targetUser.followers.push(currentUserId);
       await currentUser.save();
@@ -255,6 +310,11 @@ exports.followUnfollowUser = async (req, res) => {
       const populatedNotif = await Notification.findById(notification._id)
         .populate('senderId', 'username name profileImage isVerified')
         .exec();
+
+      // Invalidate follow-related caches
+      await cache.delByPattern(`user:${targetUserId}:*`);
+      await cache.delByPattern(`user:${currentUserId}:*`);
+      await cache.del(cacheKeys.suggested(currentUserId));
 
       if (global.io) {
         const targetSocketId = global.onlineUsers.get(targetUserId);
@@ -278,12 +338,94 @@ exports.followUnfollowUser = async (req, res) => {
         });
       }
 
+      // Send follow notification email (non-blocking)
+      if (targetUser.email) {
+        sendFollowerNotification(targetUser, currentUser).catch((err) =>
+          console.error('[Email] Follower notification failed:', err.message)
+        );
+      }
+
       return res.status(200).json({
         message: 'Followed successfully',
         isFollowing: true,
         followersCount: targetUser.followers.length,
         followingCount: currentUser.following.length,
       });
+    }
+  } catch (error) {
+    return res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+exports.blockUser = async (req, res) => {
+  try {
+    const targetUserId = req.params.id;
+    const currentUserId = req.user.id;
+
+    if (targetUserId === currentUserId.toString()) {
+      return res.status(400).json({ message: 'You cannot block yourself' });
+    }
+
+    const currentUser = await User.findById(currentUserId);
+    if (!currentUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const isBlocked = currentUser.blockedUsers.some(
+      (id) => id.toString() === targetUserId,
+    );
+
+    if (isBlocked) {
+      currentUser.blockedUsers = currentUser.blockedUsers.filter(
+        (id) => id.toString() !== targetUserId,
+      );
+      currentUser.following = currentUser.following.filter(
+        (id) => id.toString() !== targetUserId,
+      );
+      const targetUser = await User.findById(targetUserId);
+      if (targetUser) {
+        targetUser.followers = targetUser.followers.filter(
+          (id) => id.toString() !== currentUserId.toString(),
+        );
+        await targetUser.save();
+      }
+
+      await currentUser.save();
+      // Invalidate caches
+      await cache.delByPattern(`user:${currentUserId}:*`);
+      await cache.delByPattern(`user:${targetUserId}:*`);
+
+      return res.status(200).json({ message: 'User unblocked', isBlocked: false });
+    } else {
+      currentUser.blockedUsers.push(targetUserId);
+      currentUser.following = currentUser.following.filter(
+        (id) => id.toString() !== targetUserId,
+      );
+      const targetUser = await User.findById(targetUserId);
+      if (targetUser) {
+        targetUser.followers = targetUser.followers.filter(
+          (id) => id.toString() !== currentUserId.toString(),
+        );
+        targetUser.following = targetUser.following.filter(
+          (id) => id.toString() !== currentUserId.toString(),
+        );
+        if (currentUser.followers.some((id) => id.toString() === targetUserId)) {
+          currentUser.followers = currentUser.followers.filter(
+            (id) => id.toString() !== targetUserId,
+          );
+          targetUser.following = targetUser.following.filter(
+            (id) => id.toString() !== currentUserId.toString(),
+          );
+        }
+        await targetUser.save();
+      }
+
+      await currentUser.save();
+      // Invalidate caches
+      await cache.delByPattern(`user:${currentUserId}:*`);
+      await cache.delByPattern(`user:${targetUserId}:*`);
+
+      return res.status(200).json({ message: 'User blocked', isBlocked: true });
     }
   } catch (error) {
     return res.status(500).json({ message: 'Server error', error: error.message });
@@ -297,6 +439,13 @@ exports.searchUsers = async (req, res) => {
       return res.status(200).json([]);
     }
 
+    // Try cache
+    const cacheKey = cacheKeys.search(q);
+    const cached = await cache.get(cacheKey);
+    if (cached) {
+      return res.status(200).json(cached);
+    }
+
     const users = await User.find({
       $or: [
         { username: { $regex: q, $options: 'i' } },
@@ -306,6 +455,8 @@ exports.searchUsers = async (req, res) => {
       .select('username name profileImage isVerified')
       .limit(20);
 
+    // Cache for 1 minute
+    await cache.set(cacheKey, users, 60);
     return res.status(200).json(users);
   } catch (error) {
     return res.status(500).json({ message: 'Server error', error: error.message });
@@ -315,6 +466,14 @@ exports.searchUsers = async (req, res) => {
 exports.getSuggestedUsers = async (req, res) => {
   try {
     const currentUserId = req.user.id;
+
+    // Try cache
+    const cacheKey = cacheKeys.suggested(currentUserId);
+    const cached = await cache.get(cacheKey);
+    if (cached) {
+      return res.status(200).json(cached);
+    }
+
     const currentUser = await User.findById(currentUserId);
 
     const excludeUsers = [currentUserId, ...currentUser.following];
@@ -324,6 +483,8 @@ exports.getSuggestedUsers = async (req, res) => {
       .limit(5)
       .sort({ 'followers.length': -1 });
 
+    // Cache for 5 minutes
+    await cache.set(cacheKey, users, 300);
     return res.status(200).json(users);
   } catch (error) {
     return res.status(500).json({ message: 'Server error', error: error.message });

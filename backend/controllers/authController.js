@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const { sendWelcomeEmail } = require('../services/emailService');
 
 exports.register = async (req, res) => {
   try {
@@ -28,6 +29,11 @@ exports.register = async (req, res) => {
       profileImage: picture || undefined,
     });
 
+    // Send welcome email (non-blocking — doesn't await)
+    sendWelcomeEmail(user).catch((err) =>
+      console.error('[Email] Welcome email failed:', err.message)
+    );
+
     return res.status(201).json({
       message: 'User registered successfully',
       user,
@@ -40,12 +46,36 @@ exports.register = async (req, res) => {
 
 exports.login = async (req, res) => {
   try {
-    const { uid: firebaseUID } = req.firebaseUser;
+    const { uid: firebaseUID, email, name, picture } = req.firebaseUser;
 
     let user = await User.findOne({ firebaseUID });
 
     if (!user) {
-      return res.status(404).json({ message: 'User profile not found in MongoDB. Register required.' });
+      // Auto-create MongoDB user profile if Firebase user exists but MongoDB doesn't
+      console.log(`[Auth] Auto-creating MongoDB user for Firebase UID: ${firebaseUID}`);
+
+      const baseUsername = (email || 'user').split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
+      let username = baseUsername;
+      let isUnique = false;
+      let counter = 1;
+
+      while (!isUnique) {
+        const existingUsername = await User.findOne({ username: username.toLowerCase() });
+        if (!existingUsername) {
+          isUnique = true;
+        } else {
+          username = `${baseUsername}${counter}`;
+          counter++;
+        }
+      }
+
+      user = await User.create({
+        firebaseUID,
+        username: username.toLowerCase(),
+        name: name || username,
+        email,
+        profileImage: picture || undefined,
+      });
     }
 
     user.isOnline = true;

@@ -9,14 +9,32 @@ cloudinary.config({
 });
 
 // ---------------- Image storage (existing) ----------------
+const IMAGE_TRANSFORMS = {
+  // Default upload transformation: limit size + auto quality
+  upload: { width: 1080, height: 1080, crop: 'limit', quality: 'auto', fetch_format: 'auto' },
+  // Feed thumbnails (smaller, faster)
+  thumb: { width: 400, height: 400, crop: 'fill', gravity: 'auto', quality: 'auto', fetch_format: 'auto' },
+  // Profile avatars
+  avatar: { width: 150, height: 150, crop: 'fill', gravity: 'face', quality: 'auto', fetch_format: 'auto' },
+};
+
 const imageStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
     folder: 'social_media_platform',
     allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
-    transformation: [{ width: 1080, height: 1080, crop: 'limit', quality: 'auto', fetch_format: 'auto' }],
+    transformation: [IMAGE_TRANSFORMS.upload],
   },
 });
+
+// Helper: generate a Cloudinary URL with transformations
+const getOptimizedUrl = (publicId, transform = 'upload') => {
+  if (!publicId) return publicId;
+  if (!publicId.includes('cloudinary')) return publicId; // not a cloudinary URL
+
+  const t = IMAGE_TRANSFORMS[transform] || IMAGE_TRANSFORMS.upload;
+  return cloudinary.url(publicId, t);
+};
 
 // ---------------- Video storage (new) ----------------
 // Cloudinary requires resource_type: 'video' for video uploads.

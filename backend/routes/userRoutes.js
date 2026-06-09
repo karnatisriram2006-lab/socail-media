@@ -23,5 +23,6 @@ router.get('/:id', protect, userController.getUserById);
 router.put('/profile', protect, parser.single('profileImage'), userController.updateUserProfile);
 router.post('/follow/:id', protect, userController.followUnfollowUser);
 router.post('/:id/follow', protect, userController.followUnfollowUser);
+router.post('/block/:id', protect, userController.blockUser);
 
 module.exports = router;

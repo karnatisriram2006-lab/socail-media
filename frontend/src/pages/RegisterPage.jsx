@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuthStore } from '../store/authStore'
 import Input from '../components/ui/Input'
 import Button from '../components/ui/Button'
-import { Mail, Lock, User, Sparkles } from 'lucide-react'
+import { Mail, Lock, User, Sparkles, LogIn } from 'lucide-react'
 
 export default function RegisterPage() {
+  const navigate = useNavigate()
   const { register, loginWithGoogle, loading, error, clearError } = useAuthStore()
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
@@ -14,10 +15,12 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [name, setName] = useState('')
   const [formError, setFormError] = useState('')
+  const [emailExists, setEmailExists] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setFormError('')
+    setEmailExists(false)
     clearError()
     if (!username || !email || !password) {
       setFormError('Please fill in all required fields')
@@ -34,7 +37,11 @@ export default function RegisterPage() {
     try {
       await register(email, password, username, name)
     } catch (err) {
-      setFormError(err.message || 'Registration failed')
+      const msg = err.message || 'Registration failed'
+      setFormError(msg)
+      if (err.code === 'auth/email-already-in-use') {
+        setEmailExists(true)
+      }
     }
   }
 
@@ -44,6 +51,10 @@ export default function RegisterPage() {
     } catch (err) {
       setFormError(err.message || 'Google registration failed')
     }
+  }
+
+  const switchToLogin = () => {
+    navigate('/login', { state: { email } })
   }
 
   return (
@@ -65,9 +76,23 @@ export default function RegisterPage() {
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
-            className="bg-red-50 text-red-600 text-sm p-3 rounded-lg mb-4"
+            className={`text-sm p-3 rounded-lg mb-4 ${
+              emailExists
+                ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                : 'bg-red-50 text-red-600'
+            }`}
           >
-            {formError || error}
+            <p>{formError || error}</p>
+            {emailExists && (
+              <button
+                type="button"
+                onClick={switchToLogin}
+                className="mt-2 w-full flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700 text-white py-2 px-3 rounded-lg text-sm font-medium transition-colors"
+              >
+                <LogIn className="w-4 h-4" />
+                Go to Sign In page
+              </button>
+            )}
           </motion.div>
         )}
 
